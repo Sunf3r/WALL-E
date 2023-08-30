@@ -9,7 +9,7 @@ export default class extends Command {
 	}
 	async run(ctx: CmdContext) {
 		const time = Date.now();
-		await ctx.bot.send(ctx.msg.chat, 'Calculando...');
+		await ctx.bot.send(ctx.msg.chat, 'Pinging...');
 
 		return await ctx.bot.send(ctx.msg, `Ping: *${Date.now() - time}ms*`);
 	}

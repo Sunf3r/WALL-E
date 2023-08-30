@@ -1,5 +1,5 @@
-import Command from '../../Core/Command';
 import { CmdContext } from '../../Typings';
+import Command from '../../Core/Command';
 import translate from 'google-translate';
 
 export default class extends Command {
@@ -18,7 +18,7 @@ export default class extends Command {
 		};
 		const t = await translate(ctx.args.join(' '), options);
 
-		const msg = '🌐 *Google Translate*\n' +
+		const msg = '*[🌐] Google Translate*\n' +
 			`*${t.from.language.iso}  ➟  ${options.to}*\n` +
 			'```\n' + t.text + '```';
 

@@ -26,7 +26,7 @@ export default class extends Command {
 			case 'extendedTextMessage':
 				if (!ctx.args[0] && !ctx.msg.quoted) return;
 
-				// se a msg ta respondendo outra ctx.msg q contém uma mídia
+				// if the quoted msg has media
 				if (ctx.msg.quoted && mediaTypes.includes(ctx.msg.quoted.type!)) {
 					sticker = await ctx.bot.downloadMedia(ctx.msg.quoted);
 
