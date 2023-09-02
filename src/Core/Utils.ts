@@ -1,27 +1,40 @@
-import type { Msg, MsgTypes } from '../Typings';
+import type { CmdContext, Msg, MsgTypes } from '../Typings';
 import { type proto } from 'baileys';
-import type bot from './Bot';
+import prisma from './Prisma';
+import User from './User';
+import Bot from './Bot';
 
-export async function convertMsgData(raw: proto.IWebMessageInfo, bot?: bot) {
+export async function getCtx(raw: proto.IWebMessageInfo, bot: Bot) {
 	const { message, key, pushName } = raw;
 
 	const type = Object.keys(message!)[0] as MsgTypes;
 	// msg type
+	const userID = key.participant || key?.remoteJid!;
 
 	let group; // group metadata
-	if (key.participant) group = await bot?.getGroup(key?.remoteJid!);
+	if (key.participant) group = await bot.getGroup(key?.remoteJid!);
+
+	let user = bot.users.get(userID);
+	if (!user) {
+		user = new User(userID);
+		bot.users.set(userID, user);
+	}
 
 	return {
-		id: key.id!, // msg id
-		type,
-		author: key.participant || key?.remoteJid!, // msg author id
-		chat: key?.remoteJid!, // msg chat id
-		username: pushName!, // msg author name
+		prisma,
+		msg: {
+			id: key.id!, // msg id
+			chat: key?.remoteJid!, // msg chat id
+			author: pushName!, // msg author name
+			text: getMsgText(message!, type).trim(),
+			type, // msg type
+			quoted: getQuoted(raw), // quoted msg
+			raw, // raw msg obj
+		},
+		user,
 		group,
-		text: getMsgText(message!, type).trim(),
-		quoted: getQuoted(raw), // quoted msg
-		raw, // raw msg obj
-	} as Msg;
+		bot,
+	} as CmdContext;
 }
 
 export function getQuoted(raw: proto.IWebMessageInfo) {
@@ -46,7 +59,7 @@ export function getQuoted(raw: proto.IWebMessageInfo) {
 	} as Partial<Msg>;
 }
 
-export async function cacheAllGroups(bot: bot) {
+export async function cacheAllGroups(bot: Bot) {
 	const groupList = await bot.sock.groupFetchAllParticipating();
 
 	Object.keys(groupList).forEach((g) => bot.groups.set(g, groupList[g]));
