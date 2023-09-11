@@ -3,7 +3,10 @@
 		{
 			"name": "walle",
 			"script": "build/Main.js",
-			"node_args": "--expose-gc",
+			"node_args": [
+				"--expose-gc",
+				"--trace-warnings"
+			],
 			"out_file": "log/output.log",
 			"error_file": "log/error.log"
 		}

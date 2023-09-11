@@ -153,9 +153,11 @@ export default class Bot {
 	}
 
 	async downloadMedia(msg: Msg) {
-		return await downloadMediaMessage(msg.raw, 'buffer', {}, {
+		const media = await downloadMediaMessage(msg.raw, 'buffer', {}, {
 			logger: this.logger,
 			reuploadRequest: this.sock.updateMediaMessage,
 		})! as Buffer;
+
+		return media || await this.sock.updateMediaMessage(msg.raw);
 	}
 }

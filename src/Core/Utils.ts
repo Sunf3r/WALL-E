@@ -1,5 +1,6 @@
 import type { CmdContext, Msg, MsgTypes } from '../Typings';
-import { type proto } from 'baileys';
+import { AUTHOR, LINK, PACK } from '../config.json';
+import { GroupMetadata, type proto } from 'baileys';
 import prisma from './Prisma';
 import User from './User';
 import Bot from './Bot';
@@ -17,6 +18,7 @@ export async function getCtx(raw: proto.IWebMessageInfo, bot: Bot) {
 	let user = bot.users.get(userID);
 	if (!user) {
 		user = new User(userID);
+		await user.checkData();
 		bot.users.set(userID, user);
 	}
 
@@ -28,6 +30,7 @@ export async function getCtx(raw: proto.IWebMessageInfo, bot: Bot) {
 			author: pushName!, // msg author name
 			text: getMsgText(message!, type).trim(),
 			type, // msg type
+			isMedia: ['imageMessage', 'videoMessage', 'stickerMessage'].includes(type),
 			quoted: getQuoted(raw), // quoted msg
 			raw, // raw msg obj
 		},
@@ -54,6 +57,7 @@ export function getQuoted(raw: proto.IWebMessageInfo) {
 
 	return {
 		type: quotedType, // msg type
+		isMedia: ['imageMessage', 'videoMessage', 'stickerMessage'].includes(quotedType),
 		//@ts-ignore
 		text: String(quotedRaw?.conversation || msg?.text || msg?.caption || '')?.trim(),
 		raw: { message: quotedRaw }, // raw quote obj
@@ -72,4 +76,15 @@ export function getMsgText(m: proto.IMessage, type: MsgTypes) {
 		m?.conversation || m[type]?.text || m[type]?.caption || m?.extendedTextMessage?.text ||
 			'',
 	);
+}
+
+export function getStickerAuthor(msg: Msg, group: GroupMetadata) {
+	return {
+		pack: PACK.join(''),
+
+		author: AUTHOR.join('')
+			.replace('{username}', msg?.author)
+			.replace('{link}', LINK)
+			.replace('{group}', group?.subject || 'Not a group'),
+	};
 }

@@ -6,14 +6,20 @@ import User from '../Core/User';
 import Bot from '../Core/Bot';
 import { pino } from 'pino';
 
-type MsgTypes = 'conversation' | 'extendedTextMessage' | 'videoMessage' | 'imageMessage';
+type MsgTypes =
+	| 'stickerMessage'
+	| 'conversation'
+	| 'extendedTextMessage'
+	| 'videoMessage'
+	| 'imageMessage';
 
 interface Msg {
 	id: string;
 	chat: string;
 	author: string;
 	text: string;
-	type: string;
+	type: MsgTypes;
+	isMedia: boolean;
 	raw: proto.IWebMessageInfo;
 	quoted: Msg;
 }
