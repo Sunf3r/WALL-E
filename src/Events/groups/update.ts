@@ -1,5 +1,5 @@
 import { GroupMetadata } from 'baileys';
-import Bot from '../../Core/Bot';
+import Bot from '../../Components/Classes/Bot';
 
 export default async function (this: Bot, groups: Partial<GroupMetadata>[]) {
 	//fetch group metadata

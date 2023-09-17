@@ -1,5 +1,5 @@
-import type { CmdContext } from '../../Typings';
-import Command from '../../Core/Command';
+import type { CmdContext } from '@Typings/index';
+import Command from '@Classes/Command';
 
 export default class extends Command {
 	constructor() {

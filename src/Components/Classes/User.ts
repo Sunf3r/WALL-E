@@ -1,5 +1,5 @@
-import { LANG, PREFIX } from '../../config.json';
-import prisma from '../Prisma';
+import { LANG, PREFIX } from '@config';
+import prisma from '@Core/Prisma';
 
 export default class User {
 	name: string;

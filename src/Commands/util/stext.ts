@@ -1,7 +1,7 @@
-import { getStickerAuthor } from '../../Core/Utils';
-import { CmdContext } from '../../Typings';
+import { getStickerAuthor } from '@Core/Utils';
+import { CmdContext } from '@Typings/index';
 import Sticker from 'wa-sticker-formatter';
-import Command from '../../Core/Command';
+import Command from '@Classes/Command';
 import Jimp from 'jimp';
 
 export default class extends Command {

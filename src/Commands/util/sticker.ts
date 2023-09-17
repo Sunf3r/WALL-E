@@ -1,8 +1,8 @@
 import { extractMetadata, Sticker } from 'wa-sticker-formatter';
 import { readFileSync, unlink, writeFileSync } from 'fs';
-import { getStickerAuthor } from '../../Core/Utils';
-import { CmdContext, Msg } from '../../Typings';
-import Command from '../../Core/Command';
+import { CmdContext, Msg } from '@Typings/index';
+import { getStickerAuthor } from '@Core/Utils';
+import Command from '@Classes/Command';
 import { execSync } from 'child_process';
 
 export default class extends Command {
@@ -27,7 +27,7 @@ export default class extends Command {
 			const name = Math.random();
 
 			writeFileSync(`temp/${name}.webp`, buffer);
-			execSync(`python3 src/Core/removeBg.py temp/${name}.webp temp/${name}.png`);
+			execSync(`python3 src/Core/Plugins/removeBg.py temp/${name}.webp temp/${name}.png`);
 			buffer = readFileSync(`temp/${name}.png`) || buffer;
 			unlink(`temp/${name}.png`, () => {});
 			unlink(`temp/${name}.webp`, () => {});

@@ -5,10 +5,12 @@
 		"tsnd": "ts-node --esm --files src/Main.ts",
 		"test": "ts-node --esm --files Test.ts"
 	},
+	"prisma": "src/Components/Prisma/schema.prisma",
 	"dependencies": {
 		"@prisma/client": "^5.2.0",
 		"baileys": "https://github.com/WhiskeySockets/Baileys",
 		"google-translate": "github:iamtraction/google-translate",
+		"i18next": "^23.5.1",
 		"jimp": "^0.16.13",
 		"libphonenumber-js": "^1.10.37",
 		"link-preview-js": "^3.0.4",

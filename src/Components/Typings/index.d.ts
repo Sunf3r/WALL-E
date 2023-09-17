@@ -1,9 +1,8 @@
 import { DefaultArgs } from '@prisma/client/runtime/library';
+import { GroupMetadata, proto } from 'baileys';
 import { PrismaClient } from '@prisma/client';
-import { GroupMetadata } from 'baileys';
-import { proto } from 'baileys';
-import User from '../Core/Classes/User';
-import Bot from '../Core/Bot';
+import User from '@Classes/User';
+import Bot from '@Classes/Bot';
 import { pino } from 'pino';
 
 type MsgTypes =
