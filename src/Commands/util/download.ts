@@ -33,7 +33,7 @@ export default class extends Command {
 		ytdlArgs.push(
 			`-o ${path}`,
 			`-u "${process.env.SOCIAL_USERNAME}"`,
-			`-p ${process.env.SOCIAL_PASSWORD}`,
+			`-p "${process.env.SOCIAL_PASSWORD}"`,
 		);
 
 		try {
