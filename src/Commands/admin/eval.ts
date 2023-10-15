@@ -21,10 +21,10 @@ export default class extends Command {
 		let output, reaction = '✅'; // Reaction emoji
 
 		const startTime = Date.now();
-		const startRAM = getRAM(true) as number
+		const startRAM = getRAM(true) as number;
 
 		try {
-			output = await run.bind(this)(lang, args.join(' '));
+			output = await run.bind(ctx)(lang, args.join(' '));
 		} catch (e: any) {
 			reaction = '❌'; // Reaction emoji
 			output = String(e?.stack || e);
