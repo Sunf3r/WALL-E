@@ -1,13 +1,13 @@
 import config from '../JSON/config.json' assert { type: 'json' };
-import type { Prisma } from '../Typings/index.d.ts';
+import { PrismaClient } from '@prisma/client';
 
 export default class User {
 	name: str;
-	prisma: Prisma;
+	prisma: PrismaClient;
 	_userLanguage: str;
 	_userPrefix: str;
 
-	constructor(public id: str, name: str, prisma: Prisma) {
+	constructor(public id: str, name: str, prisma: PrismaClient) {
 		this.id = id;
 		this.name = name;
 		this.prisma = prisma;

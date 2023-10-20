@@ -1,4 +1,4 @@
-import type { CmdContext, Msg, MsgTypes } from '../Typings/index.d.ts';
+import type { CmdContext, Msg, MsgTypes } from '../Typings/types.ts';
 import config from '../JSON/config.json' assert { type: 'json' };
 import { isMedia, msgTypes } from '../Typings/MsgTypes.js';
 import { GroupMetadata, type proto } from 'baileys';
@@ -40,6 +40,16 @@ export async function getCtx(raw: proto.IWebMessageInfo, bot: Bot) {
 	} as CmdContext;
 }
 
+export async function cacheAllGroups(bot: Bot) {
+	const groupList = await bot.sock.groupFetchAllParticipating();
+
+	let groups = Object.keys(groupList);
+
+	groups.forEach((g) => bot.groups.set(g, groupList[g]));
+	console.log('CACHE', `${groups.length} groups cached.`, 'blue');
+	return;
+}
+
 export function getQuoted(raw: proto.IWebMessageInfo) {
 	const m = raw.message!;
 
@@ -57,16 +67,6 @@ export function getQuoted(raw: proto.IWebMessageInfo) {
 		text: getMsgText(quotedRaw),
 		raw: { message: quotedRaw }, // raw quote obj
 	} as Partial<Msg>;
-}
-
-export async function cacheAllGroups(bot: Bot) {
-	const groupList = await bot.sock.groupFetchAllParticipating();
-
-	let groups = Object.keys(groupList);
-
-	groups.forEach((g) => bot.groups.set(g, groupList[g]));
-	console.log('CACHE', `${groups.length} groups cached.`, 'blue');
-	return;
 }
 
 function getMsgText(m: proto.IMessage) {

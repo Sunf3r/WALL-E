@@ -1,17 +1,15 @@
-import { DefaultArgs } from '@prisma/client/runtime/library';
 import { GroupMetadata, proto } from 'baileys';
 import { PrismaClient } from '@prisma/client';
-import User from '../Classes/User';
+import User from '../Classes/User.js';
 import { TFunction } from 'i18next';
-import Bot from '../Classes/Bot';
+import Bot from '../Classes/Bot.js';
 import { pino } from 'pino';
 
-type Lang = 'py' | 'lua' | 'deno' | 'node' | 'eval' | 'cpp';
+export type Lang = 'py' | 'lua' | 'deno' | 'node' | 'eval' | 'cpp';
 
-type Prisma = PrismaClient<Prisma.PrismaClientOptions, never, DefaultArgs>;
-type Logger = pino.Logger<{ timestamp: () => str } & pino.ChildLoggerOptions>;
+export type Logger = pino.Logger<{ timestamp: () => str } & pino.ChildLoggerOptions>;
 
-type MsgTypes =
+export type MsgTypes =
 	| 'text'
 	| 'image'
 	| 'sticker'
@@ -23,7 +21,7 @@ type MsgTypes =
 	| 'reaction'
 	| 'location';
 
-interface Msg {
+export interface Msg {
 	id: str;
 	chat: str;
 	text: str;
@@ -33,7 +31,7 @@ interface Msg {
 	quoted: Msg;
 }
 
-interface Cmd {
+export interface Cmd {
 	name?: str;
 	aliases?: str[];
 	cooldown?: num;
@@ -46,8 +44,8 @@ interface Cmd {
 	run?: Function;
 }
 
-interface CmdContext {
-	prisma: Prisma;
+export interface CmdContext {
+	prisma: PrismaClient;
 	msg: Msg;
 	user: User;
 	group: GroupMetadata;
