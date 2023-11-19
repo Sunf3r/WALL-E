@@ -7,21 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model msgs {
+  author String
+  group  String
+  count  Int    @default(1)
+
+  @@id([author, group])
+}
+
 model users {
   id     String @id
+  name   String @default("")
   lang   String
   prefix String
-  cmds   Int
-}
-
-model msgs {
-  author  String @id
-  count   Int
-  groupId String
-  group   groups @relation(fields: [groupId], references: [id])
-}
-
-model groups {
-  id   String @id
-  msgs msgs[]
+  cmds   Int    @default(0)
 }

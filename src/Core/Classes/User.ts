@@ -2,19 +2,34 @@ import config from '../JSON/config.json' assert { type: 'json' };
 import prisma from '../Components/Prisma.js';
 
 export default class User {
-	name: str;
+	_username: str;
 	_userLanguage: str;
 	_userPrefix: str;
 	_cmdsCount: num;
 
 	constructor(public id: str, username: str) {
-		this.id = id;
-		this.name = username;
+		this.id = id.split('@')[0].split(':')[0];
 
+		this._username = username;
 		this._userLanguage = config.LANG;
 		this._userPrefix = config.PREFIX;
 		this._cmdsCount = 0;
 	}
+
+	public get name() {
+		return this._username;
+	}
+
+	public set name(value: str) {
+		this._username = value;
+
+		(async () =>
+			await prisma.users.update({
+				where: { id: this.id },
+				data: { name: value },
+			}))();
+	}
+
 	public get lang() {
 		return this._userLanguage;
 	}
@@ -23,17 +38,9 @@ export default class User {
 		this._userLanguage = value;
 
 		(async () =>
-			await prisma.users.upsert({
-				create: {
-					id: this.id,
-					lang: value,
-					prefix: this._userPrefix,
-					cmds: this._cmdsCount,
-				},
-				update: {
-					lang: value,
-				},
+			await prisma.users.update({
 				where: { id: this.id },
+				data: { lang: value },
 			}))();
 	}
 
@@ -45,17 +52,9 @@ export default class User {
 		this._userPrefix = value;
 
 		(async () =>
-			prisma.users.upsert({
-				create: {
-					id: this.id,
-					lang: this._userLanguage,
-					prefix: value,
-					cmds: this._cmdsCount,
-				},
-				update: {
-					prefix: value,
-				},
+			await prisma.users.update({
 				where: { id: this.id },
+				data: { prefix: value },
 			}))();
 	}
 
@@ -66,36 +65,41 @@ export default class User {
 	async addCmd() {
 		this._cmdsCount++;
 
-		return await prisma.users.upsert({
+		await prisma.users.update({
 			where: { id: this.id },
-			create: {
-				id: this.id,
-				lang: this._userLanguage,
-				prefix: this._userPrefix,
-				cmds: 1,
-			},
-			update: {
-				cmds: {
-					increment: 1,
-				},
+			data: {
+				cmds: { increment: 1 },
 			},
 		});
 	}
 
 	async checkData() {
-		let data = await prisma.users.findUnique({ where: { id: this.id } });
+		let data = await prisma.users.findUnique({
+			where: { id: this.id },
+		});
 
 		if (!data) {
 			data = await prisma.users.create({
 				data: {
 					id: this.id,
+					name: this._username,
 					lang: this._userLanguage,
 					prefix: this._userPrefix,
-					cmds: this._cmdsCount,
+					cmds: 0,
 				},
 			});
 		}
 
+		if (this._username && data.name !== this._username) {
+			data = await prisma.users.update({
+				where: { id: this.id },
+				data: {
+					name: this._username,
+				},
+			});
+		}
+
+		this._username = data.name;
 		this._userLanguage = data.lang;
 		this._userPrefix = data.prefix;
 		this._cmdsCount = data.cmds;

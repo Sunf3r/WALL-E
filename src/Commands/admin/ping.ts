@@ -1,4 +1,5 @@
 import type { CmdContext } from '../../Core/Typings/types.js';
+import prisma from '../../Core/Components/Prisma.js';
 import Command from '../../Core/Classes/Command.js';
 
 export default class extends Command {
@@ -7,7 +8,7 @@ export default class extends Command {
 			aliases: ['p'],
 		});
 	}
-	async run({ t, bot, user, msg, prisma }: CmdContext) {
+	async run({ t, bot, user, msg }: CmdContext) {
 		// Calculate WA Ping
 		let startTime = Date.now();
 		await bot.send(msg.chat, t('ping.pinging'));
@@ -20,7 +21,7 @@ export default class extends Command {
 
 		bot.send(
 			msg,
-			`*[🐧] - Ping:*\n[📞] WhatsApp: *${WAPing}ms*\n[🐘] PostgreSQL: *${DBPing}ms*`,
+			`*[🐧] - Ping:*\n[📞] WA API: *${WAPing}ms*\n[🐘] PostgreSQL: *${DBPing}ms*`,
 		);
 		return;
 	}

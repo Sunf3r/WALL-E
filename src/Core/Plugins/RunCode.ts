@@ -1,8 +1,9 @@
-import type { CmdContext, Lang } from '../Typings/types.ts';
+import type { CmdContext, Lang } from '../Typings/types.js';
 import { delay } from '../Components/Utils.js';
 import { execSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import prisma from '../Components/Prisma.js';
 import { inspect } from 'node:util';
+import fs from 'node:fs';
 
 export const langs: Lang[] = ['py', 'lua', 'deno', 'node', 'eval', 'cpp'];
 
@@ -39,13 +40,14 @@ interface runParams {
 	ctx?: CmdContext;
 	file?: string;
 }
-export async function runOtherLang({ lang, code, ctx, file }: runParams) {
+export async function runCode({ lang, code, ctx, file }: runParams) {
 	let data, cli: str[] = [];
 
 	try {
 		if (lang === 'eval') {
-			const { args, bot, msg, prisma, user, group, cmd, callCmd, t, sendUsage } = ctx!;
+			const { args, bot, msg, user, group, cmd, callCmd, t, sendUsage } = ctx!;
 			delay; // i may need it, so TS won't remove from build if it's here
+			prisma;
 			file = import.meta.url;
 
 			let output = code!.includes('await')
@@ -63,7 +65,7 @@ export async function runOtherLang({ lang, code, ctx, file }: runParams) {
 			data = langInfo[lang!];
 
 			file = `temp/exec.${data.ext}`;
-			writeFileSync(file, code!);
+			fs.writeFileSync(file, code!);
 			code = '';
 			// don't write code in CLI to prevent issues
 		}
@@ -78,8 +80,8 @@ export async function runOtherLang({ lang, code, ctx, file }: runParams) {
 	} catch (e: any) {
 		const regex = `(${cli.join('|').filterForRegex()})`;
 
-		return String(e?.stack || e)
-			.replace(`Error: Command failed: `, '') // clean errors
+		return String(e?.message || e)
+			.replace(`Command failed: `, '') // clean errors
 			.replace(new RegExp(regex, 'gi'), '') // remove cli
 			.replace(new RegExp(file!.filterForRegex(), 'gi'), 'file'); // remove file name
 

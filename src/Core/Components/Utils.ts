@@ -1,33 +1,40 @@
 import type { CmdContext, Msg, MsgTypes } from '../Typings/types.js';
 import config from '../JSON/config.json' assert { type: 'json' };
 import { isMedia, msgTypes } from '../Typings/MsgTypes.js';
-import { readdirSync, unlink } from 'node:fs';
+import { readdirSync, unlink, existsSync, mkdir, mkdirSync } from 'node:fs';
 import Group from '../Classes/Group.js';
 import User from '../Classes/User.js';
 import { type proto } from 'baileys';
 import Bot from '../Classes/Bot.js';
-import prisma from './Prisma.js';
 
 export async function getCtx(raw: proto.IWebMessageInfo, bot: Bot) {
 	const { message, key, pushName } = raw;
 
-	const type = getMsgType(message!);
 	// msg type
-	const userID = key.participant || key?.remoteJid!;
+	const type = getMsgType(message!);
 
-	let group: Group; // group metadata
-	if (key.participant) group = await bot.getGroup(key?.remoteJid!) as Group;
+	let userID = key.fromMe ? bot.sock.user?.id : key.remoteJid;
 
-	let user = bot.users.get(userID);
+	let group: Group;
+
+	if (key.participant) {
+		userID = key.participant;
+
+		if (key.remoteJid) {
+			group = await bot.getGroup(key.remoteJid);
+		}
+	}
+
+	let user: User = bot.users.get(userID);
+
 	if (!user) {
-		user = await new User(userID, pushName!).checkData();
-		bot.users.set(userID, user);
+		user = await new User(userID!, pushName!).checkData();
+		bot.users.set(user.id, user);
 	}
 
 	return {
-		prisma,
 		msg: {
-			id: key.id!, // msg id
+			key,
 			chat: key?.remoteJid!, // msg chat id
 			edited: Object.keys(message!)[0] === 'editedMessage', // if the msg is edited
 			text: getMsgText(message!),
@@ -51,7 +58,12 @@ export async function cacheAllGroups(bot: Bot) {
 
 	let groups = Object.keys(groupList);
 
-	groups.forEach((g) => new Group(groupList[g]).checkData());
+	groups.forEach(async (g) => {
+		const group = new Group(groupList[g]);
+
+		bot.groups.set(group.id, await group.checkData());
+	});
+
 	console.log('CACHE', `${groups.length} groups cached.`, 'blue');
 	return;
 }
@@ -144,6 +156,7 @@ export function findKey(obj: any, key: str): any {
 
 export async function clearTemp() {
 	// clear temp folder
+	if (!existsSync("./temp/")) mkdirSync("./temp/");
 	const files = readdirSync('./temp/');
 
 	files.forEach((f) => unlink(`./temp/${f}`, () => {}));
