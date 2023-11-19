@@ -13,11 +13,15 @@ export default class extends Command {
 	}
 
 	async run(ctx: CmdContext) {
+		const { args, bot, msg } = ctx;
+
 		// Language to be runned
-		const lang = (langs.includes(ctx.args[0] as 'py') ? ctx.args.shift() : 'eval') as Lang;
+		const lang = (langs.includes(args[0] as 'py') ? args.shift() : 'eval') as Lang;
 		const startTime = Date.now();
 
-		const output = await runCode({ lang, code: ctx.args.join(' '), ctx });
+		await bot.react(msg, '⌛');
+		const output = await runCode({ lang, code: args.join(' '), ctx });
+		bot.react(msg, '✅');
 
 		const dur = Duration
 			.fromMillis(Date.now() - startTime || 1)
@@ -30,7 +34,7 @@ export default class extends Command {
 
 		cleanTemp();
 
-		ctx.bot.send(ctx.msg, text);
+		bot.send(msg, text);
 		return;
 	}
 }

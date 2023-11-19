@@ -15,6 +15,12 @@ const mediaMsgs = {
 	'audioMessage': 'audio',
 };
 
+const coolMsgTypes = {
+	...textMsgs,
+	...mediaMsgs,
+	'locationMessage': 'location',
+};
+
 const msgTypes = {
 	...textMsgs,
 	...mediaMsgs,
@@ -31,4 +37,4 @@ const visualMsgs = {
 
 const isMedia = (type: MsgTypes) => Object.values(visualMsgs).includes(type);
 
-export { isMedia, mediaMsgs, msgTypes, textMsgs, visualMsgs };
+export { coolMsgTypes, isMedia, mediaMsgs, msgTypes, textMsgs, visualMsgs };
