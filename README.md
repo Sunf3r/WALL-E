@@ -1,4 +1,4 @@
-# ⭐ WALL-E 🤖⭐
+# ⭐  WALL-E 🤖  ⭐
 
 ### ✨ WALL-E is a WhatsApp chat bot with some cool features. ✨
 
@@ -23,35 +23,35 @@
 
 # 🤔 How to install?
 
-### `1 -` 🛠️ Install these tools to get started:
+### `1 -` 🛠️ Install runtimes and tools:
 
-- [DENO 🦕](https://deno.com/)
+- [🦕 DENO 🦕](https://deno.com/)
 
 > 🪧 » _Recommended version: 1.38 or higher_
 
-- [NodeJS 💩](https://nodejs.org/pt-br/)
+- [💩 NodeJS 💩](https://nodejs.org/pt-br/)
 
 > 🪧 » _Recommended version: 20 or higher_
 
-- [Python 🐍](https://www.python.org/)
+- [🐍 Python 🐍](https://www.python.org/)
 
 > 🪧 » _Recommended version: 3.10 or higher_
 
-- [PostgreSQL 🐘](https://www.postgresql.org/download/)
+- [🐘 PostgreSQL 🐘](https://www.postgresql.org/download/)
 
 > 🪧 » _Recommended version: 14 or higher_
 
-- [GIT CLI](https://git-scm.com/downloads)
+- [☝️🤓 GIT ☝️🤓](https://git-scm.com/downloads)
 
-> 🪧 » _Only required to clone this repo_
+> ⚠️ » _Only required to clone this repo_
 
 **OPTIONAL TOOLS REQUIRED ONLY TO RUN CODE:**
 
-- [LUA 🌙](https://www.lua.org/)
+- [🌙 LUA 🌙](https://www.lua.org/)
 
 > 🪧 » _Recommended version: 5.4 or higher_
 
-- [G++ 🔥]()
+- [🔥 G++ 🔥]()
 
 > 🪧 » _Recommended version: 11.4 or higher_
 
@@ -74,7 +74,7 @@ npm install # Download and build dependencies
 npm install -g typescript pm2 prisma # production packages
 ```
 
-### `4 -` 🌿 Preparing the environment
+### `4 -` 🌿 Preparing the environment:
 
 You can configure the bot however you want in the following files:
 
@@ -104,7 +104,7 @@ SOCIAL_PASSWORD="social media password of the bot to download media"
 
 > 💡 » _Rename "`.env.example`" to "`.env`"_
 
-### `5 -` 🚀 Getting Started:
+### `5 -` 🚀 Starting:
 
 > 💡 » _If it's your first time running the bot, you need to format the database:_
 
