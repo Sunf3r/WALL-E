@@ -1,8 +1,30 @@
 // Types
+import {
+	allMsgTypes,
+	coolTypes,
+	coolValues,
+	isMedia,
+	mediaTypes,
+	textTypes,
+	visualTypes,
+} from './settings/types/msgs.js'
 import type { CmdCtx, GroupMsg, Lang, Logger, Msg, MsgTypes } from './settings/types/types.js'
-import { allMsgTypes, isMedia } from './settings/types/msgs.js'
 
-export { allMsgTypes, CmdCtx, GroupMsg, isMedia, Lang, Logger, Msg, MsgTypes }
+export {
+	allMsgTypes,
+	CmdCtx,
+	coolTypes,
+	coolValues,
+	GroupMsg,
+	isMedia,
+	Lang,
+	Logger,
+	mediaTypes,
+	Msg,
+	MsgTypes,
+	textTypes,
+	visualTypes,
+}
 
 // Config files
 import { bot, db, sticker } from './settings/settings.json'
