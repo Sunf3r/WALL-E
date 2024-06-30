@@ -1,18 +1,18 @@
 {
-	"module": "./build/Main.js",
+	"module": "build/main.js",
 	"type": "module",
-	"exports": "./build/Main.js",
+	"exports": "./build/main.js",
 	"engines": {
 		"node": ">=20"
 	},
 	"scripts": {
 		"postinstall": "rm package-lock.json & npm run prisma:gen && npm run build",
-		"build": "",
-		"start": "rm log/* temp/* & node --no-warnings --expose-gc build/Main.js",
+		"build": "rm -r build/ & tsc",
+		"clean": "rm -r settings/log/* settings/temp/*",
 		"prisma:gen": "npx prisma generate --schema=settings/schema.prisma",
 		"prisma:push": "npx prisma db push --schema=settings/schema.prisma",
 		"fmt": "deno fmt ./ --config=settings/deno.jsonc",
-		"tsnd": "ts-node --esm src/Main.ts"
+		"tsnd": "ts-node --esm main.ts"
 	},
 	"dependencies": {
 		"@prisma/client": "^5.5.2",
