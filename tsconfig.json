@@ -14,8 +14,7 @@
 		"skipLibCheck": true /* Skip type checking all .d.ts files. */
 	},
 	"ts-node": {
-		"esm": true,
-		"experimentalSpecifierResolution": "node"
+		"esm": true
 	},
 	"exclude": ["test/", "build/", "plugin/"]
 }

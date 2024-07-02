@@ -1,6 +1,7 @@
 import { cleanTemp, Cmd, CmdCtx, delay, Lang, prisma, runCode, runner } from '../../map.js'
 import { inspect } from 'node:util'
 import { Duration } from 'luxon'
+import baileys from 'baileys'
 
 export default class extends Cmd {
 	constructor() {
@@ -28,6 +29,7 @@ export default class extends Cmd {
 			let evaled
 			prisma
 			delay // i may need it, so TS won't remove from build if it's here
+			baileys
 
 			try {
 				evaled = code.includes('await')
