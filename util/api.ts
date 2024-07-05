@@ -3,6 +3,8 @@ import { runner } from '../map.js'
 // import { api } from '../map.js'
 // import OpenAI from 'openai'
 
+export { gemini, runCode, imgRemover }
+
 async function runCode(data: { lang?: str; code?: str; file?: str }) {
 	const req = await fetch(`http://localhost:${runner.port}/run`, {
 		method: 'POST',
@@ -13,6 +15,18 @@ async function runCode(data: { lang?: str; code?: str; file?: str }) {
 	})
 
 	return await req.text()
+}
+
+async function imgRemover(img: str, quality: number) {
+	const req = await fetch(`http://localhost:${runner.port}/remover`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({ img, quality}),
+	})
+
+	return await req.json()
 }
 
 interface aiPrompt {
@@ -74,8 +88,6 @@ async function gemini({ content, model, buffer, mime }: aiPrompt) {
 		tokens: [tokens[0].totalTokens, tokens[1].totalTokens],
 	}
 }
-
-export { gemini, runCode }
 
 // async function gpt({ content, model }: aiPrompt) {
 // 	print(model)
