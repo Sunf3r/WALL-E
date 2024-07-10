@@ -36,9 +36,7 @@ async function imgRemover(img: str, quality: number) {
 	return await req.json()
 }
 
-async function gemini(
-	{ preprompt, content, model, buffer, mime, user, callback }: aiPrompt,
-): Promise<aiResponse> {
+async function gemini({ prompt, model, buffer, mime, user, callback }: aiPrompt) {
 	// Access your API key as an environment variable
 	const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY!)
 
@@ -60,7 +58,6 @@ async function gemini(
 		}],
 	})
 
-	let prompt: str | [str, Part] = preprompt + content
 	let result: GenerateContentStreamResult
 	let text = ''
 
@@ -72,22 +69,32 @@ async function gemini(
 			},
 		}
 
-		prompt = [prompt, media]
+		prompt = [prompt as str, media]
 	}
 
 	try {
-		if (!user._chat) user._chat = gemini.startChat()
+		if (!user._chat) {
+			user._chat = gemini.startChat({
+				history: [
+					{
+						role: 'user',
+						parts: [{
+							text:
+								`Create a short, concise answer and, only if necessary, a long, detailed one. Always answer in ${user.lang} and use bold for all important words and keywords.`,
+						}],
+					},
+				],
+			})
+		}
 		result = await user._chat.sendMessageStream(prompt)
 
 		for await (const chunk of result.stream) {
 			text += chunk.text()
-
-			const data = generateResponse(chunk)
-
-			callback(data)
+			callback(generateResponse(chunk))
 		}
 	} catch (e: any) {
 		text = `Error: ${e.message.encode()}`
+		print(text)
 	}
 
 	function generateResponse(chunk: EnhancedGenerateContentResponse) {
@@ -95,13 +102,13 @@ async function gemini(
 			model,
 			reason: chunk.candidates![0].finishReason || '',
 			text: text.replaceAll('**', '*').replaceAll('##', '>'),
-			promptTokens: chunk.usageMetadata?.promptTokenCount || 0,
-			responseTokens: chunk.usageMetadata?.candidatesTokenCount || 0,
+			inputSize: chunk.usageMetadata?.promptTokenCount || 0,
+			tokens: chunk.usageMetadata?.candidatesTokenCount || 0,
 		} as aiResponse
 	}
 
 	const response = await result!.response
-	return generateResponse(response)
+	return callback(generateResponse(response))
 }
 
 // async function gpt({ content, model }: aiPrompt) {

@@ -19,6 +19,6 @@ interface aiResponse {
 	model: str
 	reason: str
 	text: str
-	promptTokens: number
-	responseTokens: number
+	inputSize: number
+	tokens: number
 }
