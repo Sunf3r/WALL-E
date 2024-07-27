@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon'
 import { bot } from '../map.js'
+import i18next from 'i18next'
 import chalk from 'chalk'
 
 // get the now date time formatted
@@ -28,6 +29,11 @@ export default () => {
 		filterForRegex: {
 			value: function () {
 				return this.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+			},
+		},
+		t: {
+			value: function (lang: str) {
+				return i18next.getFixedT(lang)(this)
 			},
 		},
 		align: {
