@@ -91,8 +91,8 @@ async function gemini({ prompt, model, buffer, mime, user, callback }: aiPrompt)
 
 		interval = setInterval(() => {
 			if (data) callback(generateResponse(data))
-		}, 500)
-	
+		}, 1_000)
+
 		for await (const chunk of result.stream) {
 			data = chunk
 			text += chunk.text()
