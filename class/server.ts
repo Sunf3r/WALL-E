@@ -26,12 +26,12 @@ async function sendReminders(bot: Baileys, r: Reminder) {
 		let text = ''
 		const aiMsg = await gemini({
 			instruction:
-				'Create a short, humorous message to notify a user of a reminder in the following template. Always respond in the language of the reminder.\ntemplate: "short message \n `reminder`"\nreminder: ',
+				'Create a humorous message to notify a user of a reminder in the following template. Always respond in Portuguese.\ntemplate: "humorous message \n `reminder`"\nreminder: ',
 			prompt: r.msg,
 			model: api.aiModel.gemini,
 		})
 
-		if (!aiMsg || !aiMsg.text) text = '`' + r.msg + '`'
+		if (!aiMsg || !aiMsg.text || !aiMsg.text.includes(r.msg)) text = '`' + r.msg + '`'
 		else text = aiMsg.text
 
 		await bot.sock.sendMessage(r.chat, { text })
