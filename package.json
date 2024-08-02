@@ -15,6 +15,7 @@
 		"start": "pm2 start settings/ecosystem.config.cjs --attach",
 		"restart": "pm2 restart walle --attach",
 		"fmt": "deno fmt ./ --config=settings/deno.jsonc",
+		"translate": "npx @parvineyvazov/json-translator locale/pt.json  -m google -f pt -t en es fr pl",
 		"tsnd": "ts-node --esm main.ts",
 		"clean": "rm -r settings/log/* settings/temp/*"
 	},

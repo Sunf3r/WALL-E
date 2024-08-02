@@ -14,14 +14,15 @@ export default class extends Cmd {
 
 		const toLang = args.shift()
 		try {
-			const translation = await translate(args.join(' '), { to: toLang })
+			const output = await translate(args.join(' '), { to: toLang })
 
 			const text = `*[🌐] - ${t('translate.desc')}*\n` +
-				`*${translation?.from.language.iso}  ➟  ${toLang}*\n` +
-				translation?.text.encode()
+				`*${output?.from.language.iso}  ➟  ${toLang}*\n` +
+				output?.text.encode()
 
 			bot.send(msg, text)
-		} catch (_e) {
+		} catch (e: any) {
+			print(e)
 			sendUsage()
 		}
 		return
