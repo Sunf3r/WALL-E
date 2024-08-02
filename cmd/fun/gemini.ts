@@ -10,9 +10,19 @@ export default class extends Cmd {
 
 	async run({ bot, msg, args, user, sendUsage }: CmdCtx) {
 		if (!args[0]) return sendUsage()
-		await bot.react(msg, 'loading')
-
 		let model = api.aiModel.gemini
+
+		if (args[0] === 'pro') {
+			if (!args[1]) return sendUsage()
+			model = api.aiModel.geminiPro
+		}
+
+		if (args[0] === 'reset') {
+			user.geminiCtx = []
+			if (!args[1]) return bot.react(msg, 'ok')
+		}
+
+		await bot.react(msg, 'loading')
 		let buffer, mime, stream: Promise<CmdCtx> | CmdCtx
 		const language = `langs.${user.lang}`.t('en')
 		const instruction =

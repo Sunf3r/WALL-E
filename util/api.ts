@@ -84,42 +84,41 @@ async function gemini({ instruction, prompt, model, buffer, mime, user, callback
 		}
 		user = user!
 
-		if (!user._chat) {
-			user._chat = gemini.startChat({
-				history: [{ role: 'user', parts: [{ text: instruction }] }],
-			})
-		}
+		user.geminiCtx = [{ role: 'user', parts: [{ text: instruction }] }, ...user.geminiCtx]
 
-		result = await user._chat.sendMessageStream(prompt)
+		const chat = gemini.startChat({ history: user.geminiCtx })
+		result = await chat.sendMessageStream(prompt)
 
-		interval = setInterval(() => {
-			if (data) callback(generateResponse(data))
-		}, 1_000)
+		user.geminiCtx = await chat.getHistory()
+		user.geminiCtx.shift()
+
+		interval = setInterval(() => callback(generateResponse(data)), 1_000)
 
 		for await (const chunk of result.stream) {
 			data = chunk
 			text += chunk.text()
 		}
 
-		const response = await result.response
-		return callback(generateResponse(response))
+		data = await result.response
+		text = data.text()
 	} catch (e: any) {
-		text = `Error: ${e.message.encode()}`
+		text = e.message.encode()
 		print(text)
 	} finally {
 		clearInterval(interval)
+		// @ts-ignore
+		if (callback) callback(generateResponse(data))
 	}
 
-	function generateResponse(chunk: EnhancedGenerateContentResponse) {
+	function generateResponse(chunk?: EnhancedGenerateContentResponse) {
 		return {
 			model,
-			reason: chunk.candidates![0].finishReason || '',
+			reason: chunk?.candidates![0]?.finishReason || 'no reason',
 			text: text.replaceAll('**', '*').replaceAll('##', '>'),
-			inputSize: chunk.usageMetadata?.promptTokenCount || 0,
-			tokens: chunk.usageMetadata?.candidatesTokenCount || 0,
+			inputSize: chunk?.usageMetadata?.promptTokenCount || 0,
+			tokens: chunk?.usageMetadata?.candidatesTokenCount || 0,
 		} as aiResponse
 	}
-	clearInterval(interval)
 }
 
 // async function gpt({ content, model }: aiPrompt) {

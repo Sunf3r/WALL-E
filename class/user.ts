@@ -1,4 +1,4 @@
-import { ChatSession } from '@google/generative-ai'
+import { Content } from '@google/generative-ai'
 import { db, prisma } from '../map.js'
 
 export default class User {
@@ -6,7 +6,7 @@ export default class User {
 	_userLanguage: str
 	_userPrefix: str
 	_cmdsCount: num
-	_chat?: ChatSession
+	geminiCtx: Content[]
 	lastCmd: {
 		time: num
 		cmdReply?: str
@@ -15,6 +15,7 @@ export default class User {
 	constructor(public id: str, username: str) {
 		this.id = id.split('@')[0].split(':')[0]
 		this.lastCmd = { time: 0 }
+		this.geminiCtx = []
 
 		this._username = username
 		this._userLanguage = db.userDefault.language
