@@ -172,19 +172,10 @@ export default class Baileys {
 		const cmd: Cmd = new imported()
 		cmd.name = file.slice(0, -3)
 
-		const properties: Cmd = Object.assign({
-			name: '',
-			aliases: [],
-			cooldown: 3,
-			run: cmd.run,
-		}, cmd)
-		// Compare cmd properties with a 'template base'
-		// Fill missing data with default data
-
+		this.cmds.set(cmd.name!, cmd)
 		// Set cmd
-		this.cmds.set(properties.name!, properties)
 
-		properties.aliases.forEach((a) => this.aliases.set(a, properties.name!))
+		cmd.aliases.forEach((a) => this.aliases.set(a, cmd.name!))
 		// Set cmd aliases
 	}
 

@@ -15,7 +15,7 @@ export default abstract class Cmd {
 		this.name = ''
 		this.aliases = c.aliases || []
 		this.cooldown = c.cooldown === 0 ? 0 : c.cooldown || 3 // Ignore some cmds cooldown
-		this.subCmds = []
+		this.subCmds = c.subCmds || []
 		this.access = Object.assign({
 			dm: true,
 			groups: true,
