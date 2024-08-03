@@ -42,13 +42,8 @@ interface CmdCtx {
 	user: User
 	group: Group | undefined
 	bot: Baileys
-	input: {
-		args: str[]
-		msg: Msg
-	}
 	args: str[]
 	cmd: Cmd
-	callCmd: str
 	t: TFunction<'translation', undefined>
 	sendUsage(): Promise<void>
 }

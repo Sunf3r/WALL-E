@@ -57,19 +57,21 @@ export { Baileys, Cmd, Collection, Group, prisma, server, User }
 
 // Functions
 import {
+	getCtx,
+	getMsgText,
+	getMsgType,
+    checkPermissions,
+	getQuoted,
+	msgMeta,
+} from './util/message.js'
+import {
 	cacheAllGroups,
 	cleanTemp,
 	delay,
 	findKey,
 	genStickerMeta,
-	getArgs,
-	getCtx,
-	getMsgText,
-	getMsgType,
-	getQuoted,
 	isEmpty,
 	isValidPositiveIntenger,
-	msgMeta,
 } from './util/functions.js'
 import proto from './util/proto.js'
 import locale, { languages } from './util/locale.js'
@@ -80,9 +82,9 @@ export {
 	cleanTemp,
 	delay,
 	findKey,
+    checkPermissions,
 	gemini,
 	genStickerMeta,
-	getArgs,
 	getCtx,
 	getMsgText,
 	getMsgType,
