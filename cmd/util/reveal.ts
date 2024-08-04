@@ -20,7 +20,7 @@ export default class extends Cmd {
 		await bot.react(msg, 'loading')
 
 		const msgObj = { // don't send media with view once if user says forever/f
-			viewOnce: ['forever', 'f'].includes(args[0]) ? false : true,
+			viewOnce: !['forever', 'f'].includes(args[0]),
 		} as AnyMessageContent
 
 		// @ts-ignore send sticker as image
