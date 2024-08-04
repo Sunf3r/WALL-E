@@ -16,6 +16,7 @@ interface String {
 
 interface Number {
 	bytes(onlyNumbers?: bool): string | number
+	duration(ms?: boolean): str
 }
 
 interface Reminder {

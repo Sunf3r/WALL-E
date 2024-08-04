@@ -1,6 +1,5 @@
 import { cleanTemp, Cmd, CmdCtx, delay, Lang, prisma, runCode, runner } from '../../map.js'
 import { inspect } from 'node:util'
-import { Duration } from 'luxon'
 import baileys from 'baileys'
 
 export default class extends Cmd {
@@ -50,13 +49,11 @@ export default class extends Cmd {
 			// runCode: run on a separate thread
 		}
 
-		const dur = Duration // code execution duration
-			.fromMillis(Date.now() - startTime! || 1)
-			.rescale()
-			.toHuman({ unitDisplay: 'narrow' })
+		// execution duration
+		const duration = (Date.now() - startTime!).duration(true)
 		const RAM = process.memoryUsage().rss.bytes() // current RAM usage
 
-		const text = `\`$ ${lang} (${RAM} | ${dur})\`\n` +
+		const text = `\`$ ${lang} (${RAM} | ${duration})\`\n` +
 			output.trim().encode()
 
 		cleanTemp() // clean temp folder

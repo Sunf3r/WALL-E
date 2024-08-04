@@ -1,3 +1,4 @@
+import humanizeDuration, { Unit } from 'humanize-duration'
 import { DateTime, Duration } from 'luxon'
 import { inspect } from 'node:util'
 import { getFixedT } from 'i18next'
@@ -50,7 +51,7 @@ export default () => {
 		},
 		toMs: { // convert a str on ms
 			value: function () { // '10s' => 1_000 * 10
-				const match: str[] = this.match(/(\d+)(d|h|m|s|w)/gi)
+				const match: str[] = this.match(/(\d+)(y|d|h|m|s|w)/gi)
 				if (!match[0]) return 0
 
 				const ms = match
@@ -59,6 +60,7 @@ export default () => {
 						const unit = m.replace(String(quantity), '')
 
 						const duration = Duration.fromObject({
+							years: unit === 'y' ? quantity : undefined,
 							days: unit === 'd' ? quantity : undefined, // Convert 'd' to 'days'
 							hours: unit === 'h' ? quantity : undefined,
 							minutes: unit === 'm' ? quantity : undefined,
@@ -92,6 +94,33 @@ export default () => {
 				// if (number.slice(-2) === '.0') number = number.slice(0, -2);
 
 				return onlyNumbers ? Number(number) : number + types[type]
+			},
+		},
+		duration: { // convert ms time in short duration str
+			value: function (ms?: boolean) { // 1000 => 1s
+				const units: Unit[] = ['y', 'd', 'h', 'm', 's']
+				if (ms) units.push('ms')
+
+				return humanizeDuration.humanizer({
+					language: 'short',
+					delimiter: ' ',
+					round: true,
+					spacer: '',
+					largest: 2,
+					units,
+					languages: {
+						short: {
+							y: () => 'y',
+							mo: () => 'mo',
+							w: () => 'w',
+							d: () => 'd',
+							h: () => 'h',
+							m: () => 'm',
+							s: () => 's',
+							ms: () => 'ms',
+						},
+					},
+				})(this)
 			},
 		},
 	})
