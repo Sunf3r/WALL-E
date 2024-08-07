@@ -12,7 +12,7 @@ import $ from 'dax'
 
 const controller = new AbortController()
 const node_args = ['--expose-gc', '--no-warnings', '--env-file=settings/.env']
-const receipes = {
+const receipes = { // integrated scripts
 	out: { cmd: 'npm outdated' },
 	up: { cmd: 'npm run update' },
 	gen: { cmd: 'npm run prisma:gen' },
@@ -21,51 +21,56 @@ const receipes = {
 	wa: { cmd: `node ${node_args} build/main.js` },
 	ru: { cmd: `node ${node_args} build/plugin/runner.js}` },
 	re: { cmd: `node ${node_args} build/plugin/reminder.js}` },
-	pm2: { cmd: 'pm2 start settings/ecosystem.config.cjs --attach' },
+	pms: { cmd: 'pm2 start settings/ecosystem.config.cjs --attach' },
 }
 
-const tasks = {
-	s(args: string[]) {
+const cmds = { // like a CLI
+	s(args: string[]) { // start a script
 		console.log('Start:', ...args)
+
 		args.forEach((a) => {
-			//@ts-ignore s
+			//@ts-ignore shut up TypeScript
 			receipes[a].controller = spawn(receipes[a].cmd)
 		})
 	},
-	k(args: string[]) {
+	k(args: string[]) { // kill a script
 		console.log('Killing:', ...args)
-		//@ts-ignore s
+
+		//@ts-ignore shut up TypeScript
 		args.forEach((a) => receipes[a].controller.abort())
 	},
-	r(args: string[]) {
+	r(args: string[]) { // restart a script
 		console.log('Restarting:', ...args)
+
 		args.forEach((a) => {
 			const recipe = receipes[a as 'tsc']
-			recipe.controller.abort()
-			recipe.controller = spawn(recipe.cmd)
+			recipe.controller.abort() // kill it
+			recipe.controller = spawn(recipe.cmd) // spawn it
 		})
 	},
-	c() {
+	c() { // clear terminal
 		console.clear()
 	},
 }
 
 ask()
-watch()
+watch() // Watch project files
 
+// Ask: prompt cmds on terminal
 async function ask() {
 	const input = await $.prompt('$ ')
 
 	const args = input.split(' ')
 	const cmd = args.shift()! as 's'
 
-	const func = tasks[cmd]
+	const func = cmds[cmd]
 	if (func) func(args)
-	else spawn(input)
-	await ask()
+	else spawn(input) // run any cmd on shell
+	ask()
 	return
 }
 
+// spawn: spawn child processes
 function spawn(cmd: string) {
 	const args = cmd.split(' ')
 	cmd = args.shift()! as string
@@ -81,10 +86,13 @@ function spawn(cmd: string) {
 	return control
 }
 
+// Watch: watch files and format them
 async function watch() {
 	console.log('Watching!')
+
 	const watcher = Deno.watchFs(`${Deno.cwd()}/`)
 	for await (const event of watcher) {
+    // call deno format
 		if (event.kind === 'modify') spawn('deno fmt ./ --config=settings/deno.jsonc')
 	}
 }
