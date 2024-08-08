@@ -9,7 +9,7 @@ const app = express()
 
 app
 	.use(express.json({ limit: '50mb' })) // content type: json
-	.get('/languages', (req, res) => res.send(languages))
+	.get('/ping', async (_req, res) => res.sendStatus(200))
 	.post('/run', async (req, res) => {
 		const { lang, code, file } = req.body
 
