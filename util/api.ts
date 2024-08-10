@@ -22,7 +22,7 @@ async function runCode(data: { lang?: str; code?: str; file?: str }) {
 	return await req.text()
 }
 
-async function imgRemover(img: str, quality: number) {
+async function imgRemover(img: str, quality: num) {
 	const req = await fetch(`http://localhost:${runner.port}/remover`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },

@@ -57,7 +57,7 @@ export default () => {
 			},
 		},
 		align: { // align a word between spaces
-			value: function (limit: number, char: str = ' ', endPosition?: bool) {
+			value: function (limit: num, char: str = ' ', endPosition?: bool) {
 				const ratio = (limit - this.length) / 2
 				const start = char.repeat(Math.ceil(ratio))
 				const end = char.repeat(Math.floor(ratio))
@@ -160,7 +160,7 @@ export default () => {
 			return
 		}
 
-		const [title, msg, color]: string[] = [...args]
+		const [title, msg, color]: str[] = [...args]
 
 		const str = `[${title.align(12)}| ${now()} | ${
 			(process.memoryUsage().rss.bytes() as str).align(6, ' ', true)

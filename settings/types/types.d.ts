@@ -58,7 +58,7 @@ interface aiPrompt {
 	instruction: str
 	prompt: str | [Part, str]
 	model: str
-	buffer?: Buffer
+	buffer?: Buf
 	mime?: str
 	user?: User
 	callback?(data: aiResponse): Promise<any>
