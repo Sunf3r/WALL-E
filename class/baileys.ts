@@ -1,5 +1,5 @@
 import { Cmd, Collection, emojis, getCtx, Group, Logger, Msg, msgMeta, User } from '../map.js'
-import {
+import baileys, {
 	type AnyMessageContent,
 	type BaileysEventMap,
 	Browsers,
@@ -8,7 +8,6 @@ import {
 	makeCacheableSignalKeyStore,
 	makeInMemoryStore,
 	makeWASocket,
-	proto,
 	useMultiFileAuthState,
 	WAMessageKey,
 	type WASocket,
@@ -100,7 +99,11 @@ export default class Baileys {
 	}
 
 	// Send: Intermediate function to send msgs easier
-	async send(id: str | Msg, body: str | AnyMessageContent, reply?: proto.IWebMessageInfo) {
+	async send(
+		id: str | Msg,
+		body: str | AnyMessageContent,
+		reply?: baileys.proto.IWebMessageInfo,
+	) {
 		let { text, chat, quote } = msgMeta(id, body, reply)
 		// get msg metadata
 
@@ -125,7 +128,7 @@ export default class Baileys {
 		return await this.sock.sendMessage(chat, { edit: key, text })
 	}
 
-	async deleteMsg(msgOrKey: Msg | proto.IMessageKey) {
+	async deleteMsg(msgOrKey: Msg | baileys.proto.IMessageKey) {
 		const { chat, key } = msgMeta(msgOrKey, '')
 		// get msg metadata
 
@@ -149,14 +152,14 @@ export default class Baileys {
 	}
 
 	// getMsgs: get bot sent msgs to prevent msg failure
-	async getMsg(key: WAMessageKey): Promise<proto.IMessage | undefined> {
+	async getMsg(key: WAMessageKey): Promise<baileys.proto.IMessage | undefined> {
 		if (this.store) {
 			const msg = await this.store.loadMessage(key.remoteJid!, key.id!)
 			return msg?.message || undefined
 		}
 
 		// only if store is present
-		return proto.Message.fromObject({})
+		return baileys.proto.Message.fromObject({})
 	}
 
 	async downloadMedia(msg: Msg) {

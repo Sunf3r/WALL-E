@@ -51,9 +51,9 @@ export default () => {
 			},
 		},
 		t: { // get locale
-			value: function (lang: str) {
+			value: function (lang: str, options = {}) {
 				// 'help.menu'.t('en') => 'help menu'
-				return getFixedT(lang)(this)
+				return getFixedT(lang)(this, options)
 			},
 		},
 		align: { // align a word between spaces
