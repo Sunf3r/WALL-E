@@ -18,7 +18,7 @@ async function cacheAllGroups(bot: Baileys) {
 		bot.groups.add(group.id, await group.checkData())
 	})
 
-	print('CACHE', `${groups.length} groups cached.`, 'blue')
+	print('CACHE', `${groups.length} groups cached`, 'blue')
 	return
 }
 

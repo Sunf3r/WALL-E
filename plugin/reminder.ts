@@ -21,13 +21,15 @@ setInterval(async () => {
 	let reminders = await prisma.reminders.findMany({
 		orderBy: { remindAt: 'asc' },
 		where: { isDone: null },
-	})
+	}) // fetch all reminders
 
 	reminders = reminders.filter((r) => Number(r.remindAt) < Date.now())
+	// filter for pending reminders
 
 	for (const r of reminders) {
 		console.log(r)
 
+		// alert WALL-E about them
 		await fetch(`http://localhost:${settings.bot.port}/reminder`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -41,4 +43,4 @@ setInterval(async () => {
 			)
 			.catch((e) => console.log(r, e.message))
 	}
-}, 1_000 * 5)
+}, 1_000 * 60)

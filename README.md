@@ -9,18 +9,18 @@
 # 🤔 What do you mean by "cool features"?:
 
 - [x] Translate text;
-- [x] Search on Google;
 - [x] Talk to Gemini AI;
+- [x] Search on Google;
 - [x] Speak in 5 languages;
-- [x] Reveal view once messages;
 - [x] Set reminders for yourself;
+- [x] Reveal view once messages;
 - [x] Change its prefix just for you;
-- [x] Rank members by sent msgs count;
 - [x] Remove background from stickers;
+- [x] Rank members by sent msgs count;
 - [x] Create stickers with photos and gifs;
 - [x] Mass delete group msgs for all members;
-- [x] Run code in multiple programming languages;
 - [x] Mention all users in a group in a single msg;
+- [x] Run code in multiple programming languages;
 - [ ] Download videos and audios from many websites;
 
 **and more.**
@@ -103,27 +103,17 @@ You can configure the bot however you want in the following files:
 }
 ```
 
-- `.env` (`.env.example`)
+- `.env` (`settings/.env.example`)
 
-```env
-# you NEED a PostgreSQL database to run the bot
-DATABASE_URL="postgresql://role:password@host:port/db"
-
-# Bot devs
-DEVS="number01|number02|number03"
-
-# Optional
-GEMINI_KEY="get a key on https://aistudio.google.com/app/apikey"
-```
-
-> 💡 » _Rename "`.env.example`" to "`.env`"_
+> 💡 » _Open the file to set sensitive keys and rename "`.env.example`" to "`.env`"_
 
 ### `3 -` 🧰 Installing dependencies and starting 🚀:
 
 > 💡 » _Open the folder in terminal_
 
 ```bash
-# This script will do everything to prepare the bot for the first time
+# This script will do everything to prepare the bot for
+# the first time, but you need to do steps 1~3 first
 npm run setup
 # It will: install tsc/pm2/prisma as global pkgs, push db schema
 # install dependencies, generate prisma schema, build the bot and
@@ -135,12 +125,12 @@ npm run update
 # and rebuild the bot
 ```
 
-> ⚠️ » _None of these scripts will update `Python`, `LuaJIT`, `PostgreSQL`, `G++` or `GIT`. You still
-> need to do it by yourself_
+> ⚠️ » _None of these scripts will update `Python`, `LuaJIT`, `PostgreSQL`, `G++` or `GIT`. You
+> still need to do it by yourself_
 
 ### `4 -` 🔐 Log in:
 
-## Just scan the QR Code that will appear on terminal and you're ready to go!
+## Just scan the QR Code that will appear on terminal and then it's ready!
 
 # `-1.` 🗒️ Notes:
 

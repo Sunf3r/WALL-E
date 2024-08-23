@@ -10,7 +10,7 @@ const now = () =>
 	DateTime.now()
 		.setZone(bot.region.timezone)
 		.setLocale(bot.region.logLanguage)
-		.toFormat('T')
+		.toFormat('TT') // HOURS:MINITES:SECONDS
 
 export { now }
 
@@ -160,9 +160,12 @@ export default () => {
 			return
 		}
 
-		const [title, msg, color]: str[] = [...args]
+		const brightColors = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
+		let [title, msg, color]: str[] = [...args]
 
-		const str = `[${title.align(12)}| ${now()} | ${
+		if (brightColors.includes(color)) color += 'Bright'
+
+		const str = `[${title.align(9)}| ${now()} | ${
 			(process.memoryUsage().rss.bytes() as str).align(6, ' ', true)
 		}] - ${msg}`
 
@@ -171,7 +174,5 @@ export default () => {
 		// it prints: [ TITLE | 18:04 | 69MB ] - msg (colored)
 		return
 	}
-
-	print('PROTO', 'All set.', 'yellowBright')
 	return
 }
