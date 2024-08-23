@@ -9,8 +9,13 @@ export default class Collection<K, V> extends Map {
 	}
 
 	// Add: adds a value to the collection
-	add(key: K, value: V | object, extra?: any[]): V {
+	add(key: K, value?: V | object, extra?: any[]): V {
 		if (!key) throw new Error('Missing object key')
+
+		if (!value) {
+			value = key
+			key = this.size as K
+		}
 
 		const existing = this.get(key)
 		if (existing) return existing
@@ -106,16 +111,16 @@ export default class Collection<K, V> extends Map {
 	}
 
 	// Reduce: same as Array#reduce
-	reduce(func: Func, initialValue: any): any {
-		const iter = this.values()
-		let val
-		let result = initialValue === undefined ? iter.next().value : initialValue
+	reduce(func: (preValue: V, nextValue: V) => V, initialValue = 0): any {
+		const items = this.values()
+		let next
+		let previous = initialValue || items.next().value
 
-		while ((val = iter.next().value) !== undefined) {
-			result = func(result, val)
+		while ((next = items.next().value) !== undefined) {
+			previous = func(previous, next)
 		}
 
-		return result
+		return previous
 	}
 
 	// Remove: what do you think this method does?
