@@ -133,7 +133,7 @@ function getMsgType(m: proto.IMessage): MsgTypes {
 		if (res) return String(newType).trim() as MsgTypes
 	}
 
-	print('UMT', m, 'red') // When a Unknown Message Type appears
+	console.error(m, 'UMT') // When a Unknown Message Type appears
 	// I analize and categorize it.
 
 	return Object.keys(m!)[0] as MsgTypes // return raw type

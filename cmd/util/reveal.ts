@@ -14,7 +14,10 @@ export default class extends Cmd {
 
 		let target = msg.isMedia ? msg : msg.quoted // get msg or msg quoted media
 		let buffer = await bot.downloadMedia(target)
-			.catch((e) => bot.send(msg, e.message.encode()))
+			.catch((e) => {
+				console.error(e, 'CMD/STICKER')
+				bot.send(msg, e.message.encode())
+			})
 
 		if (!Buffer.isBuffer(buffer)) return bot.send(msg, t('sticker.nobuffer'))
 

@@ -142,37 +142,53 @@ export default () => {
 		},
 	})
 
-	/*      console.error        */
-	// easier way to print error messages
-	console.error = (error: { stack: str }) => {
-		const msg = String(error?.stack || error)
-			.slice(0, 512)
+	/** Console.error:
+	 * It's a error control function
+	 * Only error msgs appears on logs/terminal
+	 * and its stack appears on a specific error file
+	 * That control is handled by pm2. I only
+	 * choose console.error or console.log
+	 */
+	const printError = console.error // error old function
+	console.error = (error: { stack: str; message: str }, title = 'ERROR') => {
+		const msg = error?.message || error
+		console.log(title, msg, 'red') // error msg goes to output file
 
-		console.log('ERROR', msg, 'red')
+		const stack = String(error?.stack || error)
+		printError(fmtLog(title, stack, 'red')) // error stack goes to error file
 	}
 
-	/*      console.log        */
-	// The same console.log but styled differently
+	/** Print = Console.log
+	 * Just a print function, but styled. Like you.
+	 */
 	global.print = console.log = (...args) => { // print() === console.log()
 		if (typeof args[0] !== 'string' || !args[2]) {
 			if (typeof args[0] === 'object') return console.info(inspect(args[0], { depth: null }))
 			console.info(...args)
-			return
+			return // Ignore this shitty code.
 		}
 
-		const brightColors = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
 		let [title, msg, color]: str[] = [...args]
+		// Uh but why do I know these arguments will always come this way?
+		// I only code this way. Yea, it's not the best way, but it's definitely a way
 
-		if (brightColors.includes(color)) color += 'Bright'
+		const str = fmtLog(title, msg, color)
 
-		const str = `[${title.align(9)}| ${now()} | ${
-			(process.memoryUsage().rss.bytes() as str).align(6, ' ', true)
-		}] - ${msg}`
-
-		// console.log(str);
-		console.info(chalk.bold[color as 'red'](str))
+		console.info(str)
 		// it prints: [ TITLE | 18:04 | 69MB ] - msg (colored)
 		return
 	}
 	return
+}
+
+function fmtLog(title: str, msg: str, color: str) {
+	const brightColors = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
+
+	if (brightColors.includes(color)) color += 'Bright'
+
+	const str = `[${title.align(9)}| ${now()} | ${
+		(process.memoryUsage().rss.bytes() as str).align(6, ' ', true)
+	}] - ${msg}`
+
+	return chalk.bold[color as 'red'](str)
 }

@@ -47,6 +47,7 @@ export default class extends Cmd {
 			user,
 			callback,
 		}).catch((e) => {
+			console.error(e, 'CMD/GEMINI')
 			bot.react(msg, 'x')
 			bot.send(msg, e.message.encode())
 		})
