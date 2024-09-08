@@ -47,7 +47,7 @@ export default class extends Cmd {
 
 					await runCode({ // execute python background remover plugin on
 						file: 'plugin/removeBg.py', // a separate thread
-						code: `${file}.webp ${file}.png`,
+						code: `${file} ${file}.png`,
 						// cli args
 					})
 					buffer = await readFile(`${file}.png`) || buffer
