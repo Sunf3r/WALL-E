@@ -16,10 +16,10 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 
 		if (coolValues.includes(msg.type)) {
 			if (group) {
-				group.msgs.add(msg)
+				group.msgs.add(msg.key.id!, msg)
 				if (!msg.isBot) group.countMsg(user.id)
 				// count msgs with cool values for group msgs rank cmd
-			} else user.msgs.add(msg)
+			} else user.msgs.add(msg.key.id!, msg)
 		}
 
 		// run functions waiting for msgs (waitFor)

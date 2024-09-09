@@ -11,7 +11,7 @@ export default class User {
 		time: num
 		cmdReply?: str
 	}
-	msgs: Collection<Msg, Msg>
+	msgs: Collection<str, Msg>
 
 	constructor(public id: str, data: Partial<User>, username?: str) {
 		this.id = id.split('@')[0].split(':')[0]
