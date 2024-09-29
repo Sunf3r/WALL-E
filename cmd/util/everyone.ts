@@ -29,7 +29,7 @@ export default class extends Cmd {
 
 		const text = !args[0] ? '@everyone' : args.join(' ')
 
-		await bot.sock.sendMessage(msg.chat, { text, mentions })
+		await bot.send(msg.chat, { text, mentions })
 
 		bot.react(msg, 'ok')
 	}

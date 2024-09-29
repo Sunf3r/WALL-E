@@ -2,6 +2,12 @@ import { Baileys, Cmd, Group, User } from '../../map.ts'
 import { ChatSession } from '@google/generative-ai'
 import { TFunction } from 'i18next'
 import { proto } from 'baileys'
+import pino, { LoggerExtras, LoggerOptions } from 'pino'
+
+type Logger<Options = LoggerOptions> =
+	& pino.BaseLogger
+	& LoggerExtras<Options>
+	& CustomLevelLogger<Options>
 
 type MsgTypes =
 	| 'text'

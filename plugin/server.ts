@@ -10,15 +10,16 @@ export function server(bot: Baileys) {
 function start(bot: Baileys, resolve: Function) {
 	app
 		.use(express.json()) // use content-type: json
-		.get('/ping', async (_req, res) => res.sendStatus(200))
+		.get('/ping', async (_req, res) => {
+			res.status(200)
+		})
 		.post('/reminder', async (req, res) => { // method: post
 			const r: Reminder = req.body
 
 			if (!r.id || !r.author || !r.chat || !r.msg || !r.remindAt) {
-				return res.send('missing data')
-			}
-
-			return res.send(sendReminders(bot, r))
+				res.status(404)
+			} else res.send(sendReminders(bot, r))
+			return
 		})
 		.listen(settings.bot.port, () => {
 			print('SERVER', `Started on ${settings.bot.port}`, 'gray')

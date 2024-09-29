@@ -1,21 +1,10 @@
-import {
-	CacheManager,
-	Cmd,
-	Collection,
-	emojis,
-	getCtx,
-	Group,
-	Logger,
-	Msg,
-	msgMeta,
-	User,
-} from '../map.js'
+import { CacheManager, Cmd, emojis, getCtx, Group, Logger, Msg, msgMeta } from '../map.js'
 import baileys, {
 	type AnyMessageContent,
 	type BaileysEventMap,
 	Browsers,
 	downloadMediaMessage,
-	fetchLatestBaileysVersion,
+	// fetchLatestBaileysVersion,
 	makeCacheableSignalKeyStore,
 	makeInMemoryStore,
 	makeWASocket,
@@ -23,25 +12,21 @@ import baileys, {
 	WAMessageKey,
 	type WASocket,
 } from 'baileys'
-import pino from 'pino'
-import { resolve } from 'node:path'
 import { readdirSync } from 'node:fs'
-
-const logger: Logger = pino.default()
-logger.level = 'silent'
+import { resolve } from 'node:path'
 
 export default class Baileys {
 	sock!: WASocket
 
 	// Cache (Stored data)
 	cache: CacheManager
-	// msgs: Collection<WAMessageKey, proto.IMessage>
-	// store: ReturnType<typeof makeInMemoryStore>
+	store: ReturnType<typeof makeInMemoryStore>
 
-	constructor(public auth: str) {
+	constructor(public auth: str, public logger: Logger) {
 		this.auth = auth // auth folder
+		this.logger = logger
 
-		// this.store = makeInMemoryStore({ logger })
+		this.store = makeInMemoryStore({ logger })
 		this.cache = new CacheManager(this)
 	}
 
@@ -61,9 +46,9 @@ export default class Baileys {
 			auth: {
 				creds: state.creds,
 				// cache makes the store send/receive msgs faster
-				keys: makeCacheableSignalKeyStore(state.keys, logger),
+				keys: makeCacheableSignalKeyStore(state.keys, this.logger),
 			},
-			logger,
+			logger: this.logger,
 			version,
 			syncFullHistory: false,
 			printQRInTerminal: true,
@@ -71,9 +56,9 @@ export default class Baileys {
 			browser: Browsers.macOS('Desktop'),
 			// ignore status updates
 			shouldIgnoreJid: (jid: str) => jid?.includes('broadcast'),
-			// getMessage: this.getMsg, // get stored msgs to resent failed ones
+			getMessage: this.getMsg.bind(this), // get stored msgs to resent failed ones
 		})
-		// this.store?.bind(this.sock.ev)
+		this.store?.bind(this.sock.ev)
 
 		// save login creds
 		this.sock.ev.on('creds.update', saveCreds)
@@ -111,13 +96,14 @@ export default class Baileys {
 
 		// @ts-ignore find emojis by name | 'ok' => '✅'
 		const reaction = emojis[emoji] || emoji
-		return await this.send(chat, { react: { text: reaction, key } })
+		const ctx = await this.send(chat, { react: { text: reaction, key } })
+		return ctx.msg
 	}
 
 	async editMsg(msg: Msg, text: str) {
 		const { chat, key } = msg
 
-		return await this.sock.sendMessage(chat, { edit: key, text })
+		return await this.send(chat, { edit: key, text })
 	}
 
 	async deleteMsg(msgOrKey: Msg | baileys.proto.IMessageKey) {
@@ -141,20 +127,19 @@ export default class Baileys {
 		}
 	}
 
-	// getMsgs: get bot sent msgs to prevent msg failure
-	// async getMsg(key: WAMessageKey): Promise<baileys.proto.IMessage | undefined> {
-	// 	if (this.store) {
-	// 		const msg = await this.store.loadMessage(key.remoteJid!, key.id!)
-	// 		return msg?.message || undefined
-	// 	}
+	// getMsgs: get sent msgs to prevent msg failure
+	async getMsg(key: WAMessageKey): Promise<baileys.proto.IMessage | undefined> {
+		if (this.store) {
+			const msg = await this.store.loadMessage(key.remoteJid!, key.id!)
+			return msg?.message || undefined
+		}
 
-	// 	// only if store is present
-	// 	return baileys.proto.Message.fromObject({})
-	// }
+		return baileys.proto.Message.fromObject({})
+	}
 
 	async downloadMedia(msg: Msg) {
 		const media = await downloadMediaMessage(msg.raw, 'buffer', {}, {
-			logger,
+			logger: this.logger,
 			reuploadRequest: this.sock.updateMediaMessage,
 		})! as Buf
 
