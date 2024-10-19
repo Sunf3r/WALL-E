@@ -40,17 +40,18 @@ export default async function (this: bot, raw: { messages: proto.IWebMessageInfo
 	};
 
 	const ctx: CmdContext = {
-		prisma,
-		args,
+		sendUsage,
 		bot: this,
 		callCmd,
-		cmd,
+		prisma,
 		group,
+		args,
+		user,
+		cmd,
 		msg,
 		t,
-		user,
-		sendUsage,
 	};
+
 	try {
 		// run cmd and then react the msg
 		await cmd.run!(ctx) && this.react(msg, '✅');
