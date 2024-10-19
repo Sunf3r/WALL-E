@@ -12,12 +12,6 @@ export default class extends Cmd {
 		if (!args[0]) return sendUsage()
 		await bot.react(msg, '⌛')
 
-		let preprompt =
-			`Create a short and detailed response in ${user.lang} to the prompt, and use bold to highlight key words.
-Template:
-> *Short response:*\n{brief_response}
-> *Detailed response:*\n{detailed_response}
-Prompt: `
 		let model = api.aiModel.geminiPro
 		let buffer, mime, stream: Promise<CmdCtx> | CmdCtx
 
@@ -27,14 +21,8 @@ Prompt: `
 			mime = target.mime
 		}
 
-		if (args[0] === 'pure') {
-			args.shift()
-			preprompt = ''
-		}
-
 		await gemini({
-			preprompt,
-			content: args.join(' '),
+			prompt: args.join(' '),
 			model,
 			buffer,
 			mime,
@@ -42,9 +30,8 @@ Prompt: `
 			callback,
 		})
 
-		async function callback({ text, reason, promptTokens, responseTokens }: aiResponse) {
-			const response =
-				`${promptTokens} tokens to *${model}* (${responseTokens} tokens with ${reason})\n\n${text}`
+		async function callback({ text, reason, inputSize, tokens }: aiResponse) {
+			const response = `> ${inputSize} > *${model}* > ${tokens} (${reason})\n${text}`
 
 			if (!stream) stream = bot.send(msg, response).then((m) => stream = m)
 			// @ts-ignore
