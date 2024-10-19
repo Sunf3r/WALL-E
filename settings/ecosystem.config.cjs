@@ -1,7 +1,8 @@
 // const DENO_PATH = '~/.deno/bin/deno'
 const node_args = [
 	'--expose-gc',
-	'--no-warnings',
+	// '--no-warnings',
+	'--env-file=settings/.env',
 ]
 
 module.exports = {
