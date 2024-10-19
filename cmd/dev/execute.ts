@@ -1,6 +1,4 @@
-import { execSync } from 'node:child_process'
 import { Cmd, CmdCtx, runCode } from '../../map.js'
-import { Duration } from 'luxon'
 
 export default class extends Cmd {
 	constructor() {
@@ -24,14 +22,11 @@ export default class extends Cmd {
 		 * it's handled by runner instance
 		 */
 
-		const dur = Duration // code execution duration
-			.fromMillis(Date.now() - startTime)
-			.rescale()
-			.toHuman({ unitDisplay: 'narrow' })
-
+		// execution duration
+		const duration = (Date.now() - startTime).duration(true)
 		const RAM = process.memoryUsage().rss.bytes() // current RAM usage
 
-		const text = `\`$ ZSH (${RAM} | ${dur})\`\n` +
+		const text = `\`$ ZSH (${RAM} | ${duration})\`\n` +
 			output.trim().encode()
 
 		bot.send(msg, text)
