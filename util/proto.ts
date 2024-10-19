@@ -1,4 +1,5 @@
 import { DateTime, Duration } from 'luxon'
+import { inspect } from 'node:util'
 import { getFixedT } from 'i18next'
 import { bot } from '../map.js'
 import chalk from 'chalk'
@@ -107,6 +108,7 @@ export default () => {
 	// The same console.log but styled differently
 	global.print = console.log = (...args) => {
 		if (typeof args[0] !== 'string' || !args[2]) {
+			if (typeof args[0] === 'object') return console.info(inspect(args[0], { depth: null }))
 			console.info(...args)
 			return
 		}
