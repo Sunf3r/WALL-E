@@ -64,7 +64,6 @@ async function gemini({ prompt, model, buffer, mime, user, callback }: aiPrompt)
 	let data: EnhancedGenerateContentResponse
 	let text = ''
 	let interval
-	print(language)
 
 	if (buffer) {
 		const media = {
@@ -90,13 +89,14 @@ async function gemini({ prompt, model, buffer, mime, user, callback }: aiPrompt)
 		}
 		result = await user._chat.sendMessageStream(prompt)
 
+		interval = setInterval(() => {
+			if (data) callback(generateResponse(data))
+		}, 500)
+	
 		for await (const chunk of result.stream) {
 			data = chunk
 			text += chunk.text()
 		}
-		interval = setInterval(() => {
-			callback(generateResponse(data))
-		}, 500)
 
 		const response = await result.response
 		return callback(generateResponse(response))
