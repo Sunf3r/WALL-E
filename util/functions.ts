@@ -2,6 +2,7 @@ import {
 	allMsgTypes,
 	Baileys,
 	bot,
+	Cmd,
 	CmdCtx,
 	Group,
 	isMedia,
@@ -80,7 +81,7 @@ function getQuoted(raw: proto.IWebMessageInfo) {
 	const m = raw.message!
 
 	//@ts-ignore 'quotedMessage' is missing on lib types
-	const quotedRaw = findKey(m, 'quotedMessage')
+	const quotedRaw: Partial<proto.IMessage> = findKey(m, 'quotedMessage')
 
 	if (!quotedRaw) return
 
@@ -205,12 +206,30 @@ async function cleanTemp() {
 	return
 }
 
+function getArgs(args: str[], msg: Msg, cmd: Cmd) {
+	if ((!args[0] || cmd.subCmds.includes(args[0].toLowerCase())) && msg?.quoted?.text) {
+		let text = msg.quoted.text
+		const regex = /\.( |)[a-z]*( |)/gi
+
+		if (text.match(regex)) text = text.replace(regex, '')
+
+		args = text.split(' ')
+		msg.text = text
+	}
+
+	return {
+		args,
+		msg,
+	}
+}
+
 export {
 	cacheAllGroups,
 	cleanTemp,
 	delay,
 	findKey,
 	genStickerMeta,
+	getArgs,
 	getCtx,
 	getMsgText,
 	getMsgType,

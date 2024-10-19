@@ -4,20 +4,22 @@ export default class extends Cmd {
 	constructor() {
 		super({
 			aliases: ['g'],
+			subCmds: ['pro', 'reset'],
 			cooldown: 4,
 		})
 	}
 
-	async run({ bot, msg, args, user, sendUsage }: CmdCtx) {
+	async run({ bot, input, user, sendUsage }: CmdCtx) {
+		const { msg, args } = input
 		if (!args[0]) return sendUsage()
-		let model = api.aiModel.gemini
 
-		if (args[0] === 'pro') {
+		let model = api.aiModel.gemini
+		if (args[0] === this.subCmds[0]) { // pro
 			if (!args[1]) return sendUsage()
 			model = api.aiModel.geminiPro
 		}
 
-		if (args[0] === 'reset') {
+		if (args[0] === this.subCmds[1]) { // reset
 			user.geminiCtx = []
 			if (!args[1]) return bot.react(msg, 'ok')
 		}

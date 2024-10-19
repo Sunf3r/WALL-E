@@ -1,4 +1,4 @@
-import { Baileys, Cmd, CmdCtx, coolValues, getCtx } from '../../map.js'
+import { Baileys, Cmd, CmdCtx, coolValues, getArgs, getCtx } from '../../map.js'
 import { type proto } from 'baileys'
 import { getFixedT } from 'i18next'
 import { Duration } from 'luxon'
@@ -41,6 +41,7 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 			sendUsage,
 			callCmd,
 			group,
+			input: getArgs(args, msg, cmd),
 			args,
 			user,
 			bot,
@@ -73,7 +74,7 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 		} catch (e: any) {
 			bot.send(msg, `[⚠️] ${e?.stack || e}`)
 
-			bot.react(msg, '❌')
+			bot.react(msg, 'x')
 		}
 
 		async function sendUsage() {
