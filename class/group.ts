@@ -21,7 +21,7 @@ export default class Group {
 	author?: str
 	// author: the person who added you
 
-	cachedMsgs: Collection<string, proto.IMessageKey>
+	cachedMsgs: Collection<str, proto.IMessageKey>
 
 	constructor(g: GroupMetadata) {
 		this.id = g.id

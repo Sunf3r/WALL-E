@@ -93,7 +93,7 @@ function genRandomName(length: num = 20, prefix = '', suffix = ''): str {
 }
 
 // makeTempFile: Write a temporary file
-async function makeTempFile(content: Buffer | str, preffix?: str, suffix?: str) {
+async function makeTempFile(content: Buf | str, preffix?: str, suffix?: str) {
 	const fileName = genRandomName(20, preffix, suffix) // generate random name
 	const path = `${runner.tempFolder}/${fileName}`
 

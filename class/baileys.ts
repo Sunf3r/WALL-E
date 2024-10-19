@@ -22,12 +22,12 @@ export default class Baileys {
 	sock!: WASocket
 
 	// Collections (Stored data)
-	cmds: Collection<string, Cmd>
-	users: Collection<string, User>
-	groups: Collection<string, Group>
-	wait: Collection<string, Function>
-	alias: Collection<string, string>
-	events: Collection<string, Function>
+	cmds: Collection<str, Cmd>
+	alias: Collection<str, str>
+	users: Collection<str, User>
+	groups: Collection<str, Group>
+	wait: Collection<str, Func>
+	events: Collection<str, Func>
 
 	constructor(public auth: str) {
 		this.auth = auth // auth folder
@@ -136,12 +136,12 @@ export default class Baileys {
 		const media = await downloadMediaMessage(msg.raw, 'buffer', {}, {
 			logger,
 			reuploadRequest: this.sock.updateMediaMessage,
-		})! as Buffer
+		})! as Buf
 
 		return media || await this.sock.updateMediaMessage(msg.raw)
 	}
 
-	async folderHandler(path: str, handler: Function) {
+	async folderHandler(path: str, handler: Func) {
 		path = resolve(path)
 		let count = 0
 

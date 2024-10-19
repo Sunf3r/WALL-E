@@ -1,6 +1,8 @@
 type str = string
 type num = number
 type bool = boolean
+type Buf = Buffer
+type Func = Function
 
 // you can find these functions on `util/proto.ts`
 declare function print(...args: any[]): void

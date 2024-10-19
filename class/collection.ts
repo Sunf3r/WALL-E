@@ -106,7 +106,7 @@ export default class Collection<K, V> extends Map {
 	}
 
 	// Reduce: same as Array#reduce
-	reduce(func: Function, initialValue: any): any {
+	reduce(func: Func, initialValue: any): any {
 		const iter = this.values()
 		let val
 		let result = initialValue === undefined ? iter.next().value : initialValue

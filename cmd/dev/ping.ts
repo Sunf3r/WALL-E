@@ -40,7 +40,7 @@ function createStr(emoji: str, name: str, data: { status: str; ping: num }) {
 	return `[${emoji}]` + name.align(10).bold() + '|' + data.status.align(10).bold() + '|' +
 		`${data.ping}ms`.align(8).bold() + '\n'
 }
-async function measurePing(func: Function, ...args: any) {
+async function measurePing(func: Func, ...args: any) {
 	let status = 'Offline'
 	const startTime = Date.now()
 	const data = await func(...args).catch(() => {})
