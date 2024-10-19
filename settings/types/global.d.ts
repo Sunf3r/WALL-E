@@ -8,6 +8,7 @@ interface String {
 	encode(): str
 	toPascalCase(): str
 	align(limit: num, endPosition?: boolean): str
+	t(lang: str): str
 	filterForRegex(): str
 }
 

@@ -4,7 +4,6 @@ import {
 	GoogleGenerativeAI,
 	HarmBlockThreshold,
 	HarmCategory,
-	Part,
 } from '@google/generative-ai'
 import { aiPrompt, runner } from '../map.js'
 // import { api } from '../map.js'
@@ -59,7 +58,13 @@ async function gemini({ prompt, model, buffer, mime, user, callback }: aiPrompt)
 	})
 
 	let result: GenerateContentStreamResult
+	const language = `langs.${user.lang}`.t('en')
+	const instruction =
+		`Create a short, concise answer and, only if necessary, a long, detailed one. Always answer in ${language} and use bold for all important words and keywords.`
+	let data: EnhancedGenerateContentResponse
 	let text = ''
+	let interval
+	print(language)
 
 	if (buffer) {
 		const media = {
@@ -78,10 +83,7 @@ async function gemini({ prompt, model, buffer, mime, user, callback }: aiPrompt)
 				history: [
 					{
 						role: 'user',
-						parts: [{
-							text:
-								`Create a short, concise answer and, only if necessary, a long, detailed one. Always answer in ${user.lang} and use bold for all important words and keywords.`,
-						}],
+						parts: [{ text: instruction }],
 					},
 				],
 			})
@@ -89,14 +91,20 @@ async function gemini({ prompt, model, buffer, mime, user, callback }: aiPrompt)
 		result = await user._chat.sendMessageStream(prompt)
 
 		for await (const chunk of result.stream) {
+			data = chunk
 			text += chunk.text()
-			callback(generateResponse(chunk))
 		}
+		interval = setInterval(() => {
+			callback(generateResponse(data))
+		}, 500)
+
 		const response = await result.response
 		return callback(generateResponse(response))
 	} catch (e: any) {
 		text = `Error: ${e.message.encode()}`
 		print(text)
+	} finally {
+		clearInterval(interval)
 	}
 
 	function generateResponse(chunk: EnhancedGenerateContentResponse) {
@@ -108,7 +116,7 @@ async function gemini({ prompt, model, buffer, mime, user, callback }: aiPrompt)
 			tokens: chunk.usageMetadata?.candidatesTokenCount || 0,
 		} as aiResponse
 	}
-	return
+	return clearInterval(interval)
 }
 
 // async function gpt({ content, model }: aiPrompt) {
