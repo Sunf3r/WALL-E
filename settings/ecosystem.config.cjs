@@ -1,5 +1,7 @@
-/** PM2 Ecosystem file
+/** PM2 Ecosystem file:
  * launcher settings for every app are here
+ * See pm2 documentation for more info:
+ * https://pm2.keymetrics.io/docs/usage/application-declaration/
  */
 const node_args = [
 	'--expose-gc',
@@ -12,7 +14,8 @@ module.exports = { // yea, i really need to use module.exports. don't rage!
 		name: 'walle',
 		script: 'build/main.js', /// main file
 		node_args,
-		log_file: 'settings/log/walle.log',
+		out_file: 'settings/log/walle.log', // only output log
+		error_file: 'settings/log/walle.err', // only error log
 	}, {
 		name: 'runner',
 		script: 'build/plugin/runner.js',
@@ -21,12 +24,12 @@ module.exports = { // yea, i really need to use module.exports. don't rage!
 		// interpreter_args: 'run',
 		instances: 4,
 		exec_mode: 'cluster',
-		log_file: 'settings/log/runner.log',
-		merge_logs: true, // marge logs from all intances
+		log_file: 'settings/log/runner.log', // both error and output log
+		merge_logs: true, // merge logs from all intances
 	}, {
 		name: 'reminder',
 		script: 'build/plugin/reminder.js',
 		node_args,
-		log_file: 'settings/log/reminder.log',
+		log_file: 'settings/log/reminder.log', // both error and output log
 	}],
 }

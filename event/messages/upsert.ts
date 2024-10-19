@@ -20,7 +20,12 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 		} // count msgs with cool values for group msgs rank cmd
 
 		// run functions waiting for msgs (waitFor)
-		if (bot.wait.has(e)) bot.wait.get(e)(bot, msg, user, group)
+		if (bot.wait.has(e)) {
+			bot.wait.forEach((f) =>
+				f(bot, msg, user, group)
+					.catch((e: Error) => console.error(e, 'BOT/waitFor'))
+			)
+		}
 
 		if (!cmd) continue
 		// Check cmd permissions
@@ -55,16 +60,15 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 
 		user.addCmd() // 1+ on user personal cmds count
 
-		try {
-			// start typing (expires after about 10 seconds.)
-			// bot.sock.sendPresenceUpdate('composing', msg.chat);
+		// start typing (expires after about 10 seconds.)
+		// bot.sock.sendPresenceUpdate('composing', msg.chat);
 
-			Promise.resolve(cmd.run!(ctx))
-		} catch (e: any) {
-			bot.send(msg, `[⚠️] ${e?.stack || e}`)
-
-			bot.react(msg, 'x')
-		}
+		Promise.resolve(cmd.run!(ctx))
+			.catch((e) => {
+				console.error(e, `EVENT/${e}`)
+				bot.send(msg, `[⚠️] ${e?.message || e}`)
+				bot.react(msg, 'x')
+			})
 
 		// sendUsage: sends cmd help menu
 		async function sendUsage() {

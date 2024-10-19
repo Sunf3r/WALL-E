@@ -35,7 +35,8 @@ async function sendReminders(bot: Baileys, r: Reminder) {
 		// send remind msg
 		await bot.sock.sendMessage(r.chat, { text, mentions: [r.author + '@s.whatsapp.net'] })
 		return 200
-	} catch (e: any) {
-		return e.message
+	} catch (e) {
+		console.error(e, 'SERVER')
+		return
 	}
 }

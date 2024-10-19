@@ -137,6 +137,7 @@ async function gemini({ instruction, prompt, model, buffer, mime, user, callback
 		callback(generateResponse(data, true))
 	} catch (e: any) {
 		clearInterval(interval) // stop interval
+		console.error(e, 'API/GEMINI')
 		throw new Error(e.message) // throw it again so
 		// error will be handled by function that calls gemini()
 	}

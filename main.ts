@@ -9,6 +9,6 @@ bot.connect()
 server(bot) // start express server
 
 process // "anti-crash" to handle lib instabilities
-	.on('unhandledRejection', (e: Error) => console.error(`Unhandled Rej: ${e.stack}`))
-	.on('uncaughtException', (e) => console.error(`Uncaught Excep.: ${e?.stack}`))
-	.on('uncaughtExceptionMonitor', (e) => console.error(`Uncaught Excep.M.: ${e?.stack}`))
+	.on('uncaughtException', (e) => console.error(e, `Uncaught Excep.:`))
+	.on('unhandledRejection', (e: Error) => console.error(e, `Unhandled Rej:`))
+	.on('uncaughtExceptionMonitor', (e) => console.error(e, `Uncaught Excep.M.:`))

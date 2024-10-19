@@ -21,8 +21,8 @@ export default class extends Cmd {
 				output?.text.encode() // translation
 
 			bot.send(msg, text)
-		} catch (e: any) {
-			print(e)
+		} catch (e) {
+			console.error(e, 'CMD/TRANSLATE')
 			sendUsage()
 		}
 		return
