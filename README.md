@@ -86,13 +86,16 @@ You can configure the bot however you want in the following files:
 {
 	"bot": {
 		"owners": [""], // bot owners can use dev cmds
-		// number without special characters (555) 123-4567 = 5551234567
-		"number": "", // phone number
 		"link": "", // support channel link
 		"region": {
 			"timezone": "America/Sao_Paulo",
 			"logLanguage": "pt"
 		}
+	},
+
+	"sticker": {
+		"packName": ["pack"], // sticker pack name
+		"author": ["wall-e"] // sticker author name
 	},
 
 	"db": {
@@ -104,11 +107,6 @@ You can configure the bot however you want in the following files:
 		"groupDefault": {
 			"msgsCacheLimit": 200 // max msgs in memory (for each group)
 		}
-	},
-
-	"sticker": {
-		"packName": ["pack"], // sticker pack name
-		"author": ["wall-e"] // sticker author name
 	}
 }
 ```
@@ -153,4 +151,6 @@ npm run tsnd # You need TS-NODE
 ### I Hope you like the project :)
 
 ### `-1 -` 🗒️ Note:
-This project was made to run on Linux, if you want to run it on Windows, you may need to apply some patches or use WSL
+
+This project was made to run on Linux, if you want to run it on Windows, you may need to apply some
+patches or use WSL

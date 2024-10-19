@@ -160,7 +160,7 @@ export default class Baileys {
 
 		print(
 			'HANDLER',
-			`${counter} ${path.includes('Commands') ? 'commands' : 'events'} loaded`,
+			`${counter} ${path.includes('events') ? 'events' : 'commands'} loaded`,
 			'magentaBright',
 		)
 		return
