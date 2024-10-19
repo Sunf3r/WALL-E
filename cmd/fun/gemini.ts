@@ -12,7 +12,7 @@ export default class extends Cmd {
 		if (!args[0]) return sendUsage()
 		await bot.react(msg, '⌛')
 
-		let model = api.aiModel.geminiPro
+		let model = api.aiModel.gemini
 		let buffer, mime, stream: Promise<CmdCtx> | CmdCtx
 
 		if (msg.isMedia || msg?.quoted?.isMedia) {
