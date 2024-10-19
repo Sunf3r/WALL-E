@@ -11,14 +11,16 @@
 - [x] Translate text;
 - [x] Search on Google;
 - [x] Talk to Gemini AI;
-- [x] Speak in 6 languages;
+- [x] Speak in 5 languages;
 - [x] Reveal view once messages;
+- [x] Set reminders for yourself;
 - [x] Change its prefix just for you;
-- [x] Remove background from images;
 - [x] Rank members by sent msgs count;
+- [x] Remove background from stickers;
 - [x] Create stickers with photos and gifs;
 - [x] Mass delete group msgs for all members;
 - [x] Run code in multiple programming languages;
+- [x] Mention all users in a group in a single msg;
 - [ ] Download videos and audios from many websites;
 
 **and more.**
@@ -27,13 +29,9 @@
 
 ### `1 -` 🛠️ Install runtimes and tools:
 
-- [NodeJS 💩](https://nodejs.org/pt-br/) (For WALL-E)
+- [NodeJS 💩](https://nodejs.org/pt-br/) (For WALL-E/Runner/Reminder)
 
 > 🪧 » _Recommended version: 20 or higher_
-
-- [Python 🐍](https://www.python.org/) (For plugin)
-
-> 🪧 » _Recommended version: 3.10 or higher_
 
 - [PostgreSQL 🐘](https://www.postgresql.org/download/) (For database)
 
@@ -44,6 +42,10 @@
 - [BUN 🧁](https://bun.sh) (Can be used to run the runner)
 
 > 🪧 » _Recommended version: 1.1.18 or higher_
+
+- [Python 🐍](https://www.python.org/) (For rmbg plugin)
+
+> 🪧 » _Recommended version: 3.10 or higher_
 
 - [DENO 🦕](https://deno.com/)
 
@@ -112,9 +114,6 @@ DEVS="number01|number02|number03"
 
 # Optional
 GEMINI_KEY="get a key on https://aistudio.google.com/app/apikey"
-OPENAI_API_KEY="OPENAI API KEY"
-SOCIAL_USERNAME="social media username of the bot to download media"
-SOCIAL_PASSWORD="social media password of the bot to download media"
 ```
 
 > 💡 » _Rename "`.env.example`" to "`.env`"_
@@ -132,7 +131,7 @@ npm run setup
 
 # Later, you can update everything just running:
 npm run update
-# It will update node dependencies, update deno and bun, regenerate prisma schema,
+# It will: pull commits from repository, update node dependencies, update deno and bun, regenerate prisma schema,
 # and rebuild the bot
 ```
 
