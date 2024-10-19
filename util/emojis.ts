@@ -1,5 +1,5 @@
 export default {
-    block: '⛔',
-    loading: '⌛',
-    ok: '✅'
+	block: '⛔',
+	loading: '⌛',
+	ok: '✅',
 }
