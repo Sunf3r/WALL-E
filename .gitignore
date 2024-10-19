@@ -1,11 +1,12 @@
 # Settings
-settings.json
+settings/settings.json
 **/auth*
 *.env
 test/
 
 # Builds
 node_modules/
+build/
 
 # Logs / Lock
 logs
