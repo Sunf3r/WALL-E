@@ -16,6 +16,14 @@ interface Number {
 	bytes(onlyNumbers?: bool): string | number
 }
 
+interface Reminder {
+	id: num
+	author: str
+	chat: str
+	msg: str
+	remindAt: str
+}
+
 interface aiResponse {
 	model: str
 	reason: str

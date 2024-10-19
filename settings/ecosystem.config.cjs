@@ -23,5 +23,11 @@ module.exports = {
 			log_file: 'settings/log/runner.log',
 			merge_logs: true,
 		},
+		{
+			name: 'reminder',
+			script: 'build/plugin/reminder.js',
+			node_args,
+			log_file: 'settings/log/reminder.log',
+		},
 	],
 }

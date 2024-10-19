@@ -4,6 +4,7 @@ import { Duration } from 'luxon'
 import i18next from 'i18next'
 
 export default async function (bot: Baileys, raw: { messages: proto.IWebMessageInfo[] }, e: str) {
+	// raw.messages = []
 	if (!raw.messages[0]) return
 
 	for (const m of raw.messages) {
