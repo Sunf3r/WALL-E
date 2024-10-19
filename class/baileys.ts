@@ -77,12 +77,12 @@ export default class Baileys {
 		this.sock.ev.on('creds.update', saveCreds)
 
 		// Load commands*
-		this.folderHandler(`./build/commands`, this.loadCmds)
+		this.folderHandler(`./build/cmd`, this.loadCmds)
 		// * folderHandler() will read a folder and call the function
 		// for each file
 
 		// Load events
-		this.folderHandler(`./build/events`, this.loadEvents)
+		this.folderHandler(`./build/event`, this.loadEvents)
 		return
 	}
 
@@ -160,7 +160,7 @@ export default class Baileys {
 
 		print(
 			'HANDLER',
-			`${counter} ${path.includes('events') ? 'events' : 'commands'} loaded`,
+			`${counter} ${path.includes('event') ? 'events' : 'cmds'} loaded`,
 			'magentaBright',
 		)
 		return
