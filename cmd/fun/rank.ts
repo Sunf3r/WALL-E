@@ -3,7 +3,6 @@ import { Cmd, CmdCtx, GroupMsg, prisma, User } from '../../map.js'
 export default class extends Cmd {
 	constructor() {
 		super({
-			alias: ['r'],
 			access: {
 				dm: false,
 				groups: true,
