@@ -45,7 +45,8 @@ export default async function (bot: Baileys, event: Partial<ConnectionState>) {
 					await delay(60_000)
 				}
 
-				lastLogins.add(Date.now())
+				const now = Date.now()
+				lastLogins.add(now, now)
 				bot.connect()
 			}
 			return

@@ -21,7 +21,7 @@ export default class Group {
 	author?: str
 	// author: the person who added you
 
-	msgs: Collection<Msg, Msg>
+	msgs: Collection<str, Msg>
 
 	constructor(id: str, g: GroupMetadata | Group) {
 		this.id = id
