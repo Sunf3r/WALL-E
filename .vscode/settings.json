@@ -7,5 +7,10 @@
 
 	// Editor settings
 	"editor.formatOnSave": true,
-	"editor.defaultFormatter": "denoland.vscode-deno"
+	"editor.defaultFormatter": "denoland.vscode-deno",
+
+	// Language settings
+	"typescript.format.semicolons": "remove",
+	"typescript.preferences.quoteStyle": "single",
+	"typescript.experimental.updateImportsOnPaste": true
 }
