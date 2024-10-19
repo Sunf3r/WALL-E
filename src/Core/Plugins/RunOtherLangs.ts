@@ -1,4 +1,4 @@
-import type { CmdContext, Lang } from '../Typings/index.d.ts';
+import type { CmdContext, Lang } from '../Typings/types.ts';
 import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { inspect } from 'node:util';
@@ -49,7 +49,7 @@ export async function runOtherLang({ lang, code, ctx, file }: runParams) {
 		return inspect(output, { depth: null });
 	}
 
-	let data;
+	let data, clis: str[] = [];
 
 	if (file) {
 		lang = file.split('.')[1] as 'py';
@@ -60,11 +60,16 @@ export async function runOtherLang({ lang, code, ctx, file }: runParams) {
 
 		file = `temp/exec.${data.ext}`;
 		writeFileSync(file, code!);
-   code = '';
-   // don't write code in CLI to prevent issues
+		code = '';
+		// don't write code in CLI to prevent issues
 	}
 
 	return data.cmd!
-		.map((c) => execSync(`${c}${file} ${code}`) + '\n\n')
-		.join(' ');
+		.map((c, index) => {
+			clis[index] = `${c}${file} ${code}`; // collect CLIs
+
+			return execSync(clis[index]) + '\n';
+		})
+		.join(' ') // remove CLIs from the output
+		.replace(new RegExp(`(${clis.join('|')})`), '');
 }

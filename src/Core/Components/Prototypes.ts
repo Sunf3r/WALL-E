@@ -40,7 +40,7 @@ export default () => {
 				const end = ' '.repeat(Math.floor(ratio));
 
 				if (position === 'start') return (start + this + end).slice(0, limit);
-				else return (end + this + start).slice(0, limit)
+				else return (end + this + start).slice(0, limit);
 			},
 		},
 	});
@@ -64,7 +64,9 @@ export default () => {
 
 		const [title, msg, color] = [...args];
 
-		const str = `[${title.align(12)}| ${now()} | ${(getRAM() as str).align(11, 'end')}] - ${msg}`;
+		const str = `[${title.align(12)}| ${now()} | ${
+			(getRAM() as str).align(11, 'end')
+		}] - ${msg}`;
 
 		console.log(str);
 		//console.info(chalk.bold[color as 'red'](str));

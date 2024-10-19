@@ -11,7 +11,7 @@ import {
 	type WASocket,
 } from 'baileys';
 // import RequestCode from './RequestCode';
-import type { Cmd, Logger, Msg } from '../Typings/index.d.ts';
+import type { Cmd, Logger, Msg } from '../Typings/types.js';
 import Collection from '../Plugins/Collection.js';
 import { getCtx } from '../Components/Utils.js';
 import { readdirSync } from 'node:fs'; // DENO point

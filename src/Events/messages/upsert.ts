@@ -1,5 +1,5 @@
 import config from '../../Core/JSON/config.json' assert { type: 'json' };
-import type { CmdContext } from '../../Core/Typings/index.d.ts';
+import type { CmdContext } from '../../Core/Typings/types.js';
 import { getCtx } from '../../Core/Components/Utils.js';
 import bot from '../../Core/Classes/Bot.js';
 import { type proto } from 'baileys';

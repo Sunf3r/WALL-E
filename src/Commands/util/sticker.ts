@@ -1,6 +1,6 @@
 import { clearTemp, getStickerAuthor } from '../../Core/Components/Utils.js';
 import { runOtherLang } from '../../Core/Plugins/RunOtherLangs.js';
-import type { CmdContext } from '../../Core/Typings/index.d.ts';
+import type { CmdContext } from '../../Core/Typings/types.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import Command from '../../Core/Classes/Command.js';
 import { Sticker } from 'wa-sticker-formatter';

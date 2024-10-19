@@ -1,4 +1,4 @@
-import type{ CmdContext } from '../../Core/Typings/index.d.ts';
+import type { CmdContext } from '../../Core/Typings/types.js';
 import { clearTemp } from '../../Core/Components/Utils.js';
 import Command from '../../Core/Classes/Command.js';
 import { readFileSync, statSync } from 'node:fs';

@@ -18,6 +18,7 @@
 		"baileys": "github:WhiskeySockets/Baileys",
 		"chalk": "^5.3.0",
 		"google-translate": "github:iamtraction/google-translate",
+		"googlethis": "^1.8.0",
 		"i18next": "^23.5.1",
 		"i18next-fs-backend": "^2.2.0",
 		"jimp": "^0.22.10",

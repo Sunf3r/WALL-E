@@ -58,7 +58,7 @@ export default async function (sock: WASocket) {
 				rl.close();
 			} catch (error) {
 				console.error('API', `Failed to register: ${error}`);
-				
+
 				askForOTP();
 			}
 
