@@ -1,6 +1,6 @@
-import type { CmdContext } from '../../Typings';
+import type { CmdContext } from '@Typings/index';
 import { execSync } from 'child_process';
-import Command from '../../Core/Command';
+import Command from '@Classes/Command';
 
 export default class extends Command {
 	constructor() {

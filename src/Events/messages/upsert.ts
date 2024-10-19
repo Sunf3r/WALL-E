@@ -1,10 +1,10 @@
-import { CmdContext } from '../../Typings';
-import { getCtx } from '../../Core/Utils';
-import { DEVS } from '../../config.json';
-import type bot from '../../Core/Bot';
+import { CmdContext } from '@Typings/index';
+import { getCtx } from '@Core/Utils';
 import { type proto } from 'baileys';
+import type bot from '@Classes/Bot';
 import { appendFile } from 'fs';
 import { inspect } from 'util';
+import { DEVS } from '@config';
 
 export default async function (this: bot, raw: { messages: proto.IWebMessageInfo[] }, e: string) {
 	if (!raw.messages[0].message) return;

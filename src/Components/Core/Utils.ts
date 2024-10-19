@@ -1,10 +1,10 @@
-import type { CmdContext, Msg, MsgTypes } from '../Typings';
-import { AUTHOR, LINK, PACK } from '../config.json';
+import type { CmdContext, Msg, MsgTypes } from '@Typings/index';
+import { isMedia, msgTypes } from '@Plugins/MsgTypes';
 import { GroupMetadata, type proto } from 'baileys';
-import { isMedia, msgTypes } from './MsgTypes';
-import User from './Classes/User';
+import { AUTHOR, LINK, PACK } from '@config';
+import User from '@Classes/User';
+import Bot from '@Classes/Bot';
 import prisma from './Prisma';
-import Bot from './Bot';
 
 export async function getCtx(raw: proto.IWebMessageInfo, bot: Bot) {
 	const { message, key, pushName } = raw;

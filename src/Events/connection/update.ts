@@ -1,7 +1,7 @@
 import { type ConnectionState, DisconnectReason } from 'baileys';
-import { cacheAllGroups } from '../../Core/Utils';
+import { cacheAllGroups } from '../../Components/Core/Utils';
 import type { Boom } from '@hapi/boom';
-import type bot from '../../Core/Bot';
+import type bot from '../../Components/Classes/Bot';
 
 export default async function (this: bot, update: Partial<ConnectionState>) {
 	const { connection, lastDisconnect } = update;

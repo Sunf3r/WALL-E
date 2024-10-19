@@ -9,14 +9,14 @@ import makeWASocket, {
 	useMultiFileAuthState,
 } from 'baileys';
 // import RequestCode from './RequestCode';
-import { Cmd, Logger, Msg } from '../Typings';
+import { Cmd, Logger, Msg } from '@Typings/index';
+import Collection from '@Core/Collection';
+import { getCtx } from '@Core/Utils';
 import { readdirSync } from 'fs'; // DENO point
-import Collection from './Collection';
-import Group from './Classes/Group';
-import User from './Classes/User';
-import { getCtx } from './Utils';
 import Command from './Command';
 import { resolve } from 'path';
+import Group from './Group';
+import User from './User';
 
 export default class Bot {
 	sock!: ReturnType<typeof makeWASocket>;

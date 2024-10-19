@@ -1,8 +1,8 @@
 # Settings
-src/config.json
+**/config.json
 *.env
 auth/
-prisma/migrations
+**/Prisma/migrations
 baileys_store_multi.json
 
 # Yarn
@@ -17,5 +17,5 @@ node_modules/
 temp/*
 *lock.json
 *.lock
-*.log
+**/*.log
 logs/
