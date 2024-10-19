@@ -61,8 +61,12 @@ export default class Baileys {
 
 	async connect() {
 		// Fetch latest WA version
-		const { version } = await fetchLatestBaileysVersion()
-		print('WEBSOCKET', `Connecting to WA v${version.join('.')}`, 'green')
+		// const { version } = await fetchLatestBaileysVersion()
+		/** WA is showing fake versions to ban bots. DO NOT UNCOMMENT IT */
+
+		const version: [num, num, num] = [2, 3000, 1015901307]
+		// This version is secure
+		print('NET', `Connecting to WA v${version.join('.')}`, 'green')
 
 		// Use saved session
 		const { state, saveCreds } = await useMultiFileAuthState(this.auth)
@@ -190,7 +194,7 @@ export default class Baileys {
 		print(
 			'HANDLER',
 			`${count} ${path.includes('event') ? 'events' : 'cmds'} loaded`,
-			'magentaBright',
+			'yellow',
 		)
 		return
 	}
@@ -216,7 +220,7 @@ export default class Baileys {
 		this.sock.ev.on(name as keyof BaileysEventMap, (...args) => {
 			// It allows to modify events in run time
 			this.events.get(name)!(this, ...args, name)
-				.catch((e: any) => console.error(`Events#${name}: ${e.stack}`))
+				.catch((e: Error) => console.error(e, `EVENT/${name}:`))
 			// eventFunction(this, ...args, name);
 		})
 	}

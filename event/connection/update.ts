@@ -1,35 +1,56 @@
 import { type ConnectionState, DisconnectReason } from 'baileys'
-import { Baileys, cacheAllGroups } from '../../map.js'
+import { Baileys, cacheAllGroups, Collection, delay } from '../../map.js'
+
+// Keep last 5 logins DateTime
+const lastLogins = new Collection<num, num>(5)
 
 // connection update event
-export default async function (bot: Baileys, update: Partial<ConnectionState>) {
-	const { connection, lastDisconnect } = update
+export default async function (bot: Baileys, event: Partial<ConnectionState>) {
+	const disconnection = event.lastDisconnect?.error as any
+	const exitCode = disconnection?.output?.statusCode
+	// disconnection code
 
-	switch (connection) {
-		case 'open':
+	switch (event.connection) {
+		case 'open': // bot started
 			cacheAllGroups(bot)
-			// don't show online mark when the bot is running
+			// don't show online mark when bot is running
 			bot.sock.sendPresenceUpdate('unavailable')
 
-			return print('WEBSOCKET', 'Connection stabilized', 'green')
+			return print('NET', 'Connection stabilized', 'green')
 
 		case 'connecting':
-			return print('WEBSOCKET', 'Connecting...', 'gray')
+			return print('NET', 'Connecting...', 'gray')
 
 		case 'close':
-			const shouldReconnect = (lastDisconnect?.error as any)?.output?.statusCode !==
-				DisconnectReason.loggedOut // disconnect status code
+			print('CLOSED', `Reason (${exitCode}): ${disconnection}`, 'blue')
 
-			console.error(`Connection closed by: ${lastDisconnect?.error}`)
-			print(
-				'WEBSOCKET',
-				`Should try to reconnect: ${shouldReconnect}`,
-				'blue',
-			)
+			const reconnect = shouldReconnect(exitCode)
 
 			// reconnect if it's not a logout
-			if (shouldReconnect) bot.connect()
+			if (reconnect) {
+				if (reconnect === 'wait') {
+					print('NET', 'Waiting a minute to reconnect...', 'gray')
+					await delay(60_000)
+				}
+
+				lastLogins.add(Date.now())
+				bot.connect()
+			}
 			return
 	}
 	return
+}
+
+function shouldReconnect(code: num) {
+	const isLogout = code === DisconnectReason.loggedOut
+	if (isLogout) return false
+	// does not try to reconnect if session was logged out
+
+	const loginsAvarageDate = lastLogins.reduce((prev, crt) => prev + crt) / 5
+	const oneMinuteAgo = Date.now() - 60_000
+
+	if (loginsAvarageDate > oneMinuteAgo) return 'wait'
+	// bot will wait before reconnecting if last 5 logins was one minute ago
+
+	return true
 }
