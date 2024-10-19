@@ -11,7 +11,7 @@ export default class Collection<K, V> extends Map {
 	}
 
 	// Add: adds a value to the collection
-	async add(key: K, value?: V | object, extra?: any[]): Promise<V> {
+	async add(key: K, value?: V | object, extra: any[] = []): Promise<V> {
 		if (!key) throw new Error('Missing object key')
 
 		if (!value) {
@@ -29,7 +29,8 @@ export default class Collection<K, V> extends Map {
 			value = (value instanceof this.base ||
 					value?.constructor?.name === this.base.name)
 				? value
-				: new this.base(key, value)
+				// @ts-ignore
+				: new this.base(key, value, ...extra)
 
 			try {
 				// @ts-ignore check item data automaticaly

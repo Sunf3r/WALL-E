@@ -107,7 +107,7 @@ export default class User {
 			})
 		}
 
-		if (this._username && data.name !== this._username) {
+		if (this._username && (data.name !== this._username)) {
 			data = await prisma.users.update({
 				where: { id: this.id },
 				data: { // update user name for rank
