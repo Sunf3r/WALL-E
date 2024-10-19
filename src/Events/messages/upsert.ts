@@ -1,5 +1,6 @@
 import config from '../../Core/JSON/config.json' assert { type: 'json' };
 import type { CmdContext } from '../../Core/Typings/types.js';
+import { coolMsgTypes } from '../../Core/Typings/MsgTypes.js';
 import { getCtx } from '../../Core/Components/Utils.js';
 import type Bot from '../../Core/Classes/Bot.js';
 import { type proto } from 'baileys';
@@ -11,9 +12,9 @@ export default async function (bot: Bot, raw: { messages: proto.IWebMessageInfo[
 	// get abstract msg obj
 	const { msg, group, user } = await getCtx(raw.messages[0], bot);
 
-	if (group) {
-		group.countMsg(user.id);
+	if (group && Object.values(coolMsgTypes).includes(msg.type)) {
 		group.cacheMsg(msg);
+		if (!msg.isBot) group.countMsg(user.id);
 	}
 
 	// run 'waitFor' events
@@ -32,14 +33,6 @@ export default async function (bot: Bot, raw: { messages: proto.IWebMessageInfo[
 	if (cmd.access?.onlyDevs && !config.DEVS.includes(user.id)) return bot.react(msg, '🚫');
 
 	user.addCmd();
-
-	const sendUsage = async () => {
-		args[0] = cmd.name;
-
-		bot.cmds.get('help').run(ctx);
-		bot.react(msg, '🤔');
-		return;
-	};
 
 	const ctx: CmdContext = {
 		t: i18next.getFixedT(user.lang),
@@ -65,4 +58,12 @@ export default async function (bot: Bot, raw: { messages: proto.IWebMessageInfo[
 	}
 
 	return;
+
+	async function sendUsage() {
+		args[0] = cmd.name;
+
+		bot.cmds.get('help').run(ctx);
+		bot.react(msg, '🤔');
+		return;
+	}
 }

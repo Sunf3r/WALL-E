@@ -28,8 +28,9 @@ interface Msg {
 	text: str;
 	type: MsgTypes;
 	isMedia: bool;
-	raw: proto.IWebMessageInfo;
+	isBot: bool;
 	quoted: Msg;
+	raw: proto.IWebMessageInfo;
 }
 
 interface Cmd {

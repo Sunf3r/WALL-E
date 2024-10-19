@@ -14,20 +14,11 @@ async function getCtx(raw: proto.IWebMessageInfo, bot: Bot) {
 	// msg type
 	const type = getMsgType(message!);
 
-	let userID = key.fromMe ? bot.sock.user?.id : key.remoteJid;
+	let userID = key.participant || (key.fromMe ? bot.sock.user?.id : key.remoteJid);
 
-	let group: Group;
-
-	if (key.participant) {
-		userID = key.participant;
-
-		if (key.remoteJid) {
-			group = await bot.getGroup(key.remoteJid);
-		}
-	}
+	let group = key.remoteJid && await bot.getGroup(key.remoteJid);
 
 	let user: User = bot.users.get(userID);
-
 	if (!user) {
 		user = await new User(userID!, pushName!).checkData();
 		bot.users.add(user.id, user);
@@ -37,9 +28,10 @@ async function getCtx(raw: proto.IWebMessageInfo, bot: Bot) {
 		msg: {
 			key,
 			chat: key?.remoteJid!, // msg chat id
-			edited: Object.keys(message!)[0] === 'editedMessage', // if the msg is edited
-			text: getMsgText(message!),
 			type,
+			text: getMsgText(message!),
+			edited: Object.keys(message!)[0] === 'editedMessage', // if the msg is edited
+			isBot: key.fromMe && !key.participant,
 			isMedia: isMedia(type),
 			quoted: getQuoted(raw), // quoted msg
 			raw, // raw msg obj

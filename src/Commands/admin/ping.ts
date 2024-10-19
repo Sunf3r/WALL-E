@@ -11,7 +11,7 @@ export default class extends Command {
 	async run({ t, bot, user, msg }: CmdContext) {
 		// Calculate WA Ping
 		let startTime = Date.now();
-		await bot.send(msg.chat, t('ping.pinging'));
+		await bot.react(msg, '⌛');
 		const WAPing = Date.now() - startTime;
 
 		// Calculate DB Ping
@@ -23,6 +23,7 @@ export default class extends Command {
 			msg,
 			`*[🐧] - Ping:*\n[📞] WA API: *${WAPing}ms*\n[🐘] PostgreSQL: *${DBPing}ms*`,
 		);
+		bot.react(msg, '✅');
 		return;
 	}
 }

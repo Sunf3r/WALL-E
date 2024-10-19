@@ -10,6 +10,7 @@ export default class extends Command {
 	}
 
 	async run({ bot, msg, args, group, sendUsage }: CmdContext) {
+		group = group!;
 		const amount = Number(args[0]);
 
 		if (amount === 0) {
@@ -19,13 +20,20 @@ export default class extends Command {
 			);
 		}
 
+		if (group.cachedMsgs.size < amount) {
+			bot.send(
+				msg,
+				`Vou apagar as últimas ${group.cachedMsgs.size} mensagens e depois vou voltar a dormir bem aqui na minha rede`,
+			);
+		}
+
 		if (!isValidPositiveIntenger(amount)) return sendUsage();
 
-		for (const m of group!.getCachedMsgs(amount)) {
+		for (const m of group.getCachedMsgs(amount)) {
 			await bot.deleteMsg(m);
-			group!.cachedMsgs.remove(m.id!);
+			group.cachedMsgs.remove(m.id!);
 
-			await delay(350);
+			await delay(300);
 		}
 
 		return;
