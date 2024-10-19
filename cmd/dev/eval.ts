@@ -23,7 +23,7 @@ export default class extends Cmd {
 		bot.react(msg, 'loading')
 
 		if (lang === 'eval') {
-			const { user, group, cmd, callCmd, t, sendUsage } = ctx
+			const { user, group, cmd, t, sendUsage } = ctx
 			let evaled
 			prisma
 			delay // i may need it, so TS won't remove from build if it's here

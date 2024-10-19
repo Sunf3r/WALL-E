@@ -9,8 +9,7 @@ export default class extends Cmd {
 		})
 	}
 
-	async run({ bot, input, user, sendUsage }: CmdCtx) {
-		const { msg, args } = input
+	async run({ bot, msg, args, user, sendUsage }: CmdCtx) {
 		if (!args[0]) return sendUsage()
 
 		let model = api.aiModel.gemini
