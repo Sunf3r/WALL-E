@@ -10,8 +10,6 @@ export default class User {
 		this.id = id;
 		this._userLanguage = userLanguage || LANG;
 		this._userPrefix = userPrefix || PREFIX;
-
-		this.checkData();
 	}
 	public get lang() {
 		return this._userLanguage;
