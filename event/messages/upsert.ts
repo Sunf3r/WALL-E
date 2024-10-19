@@ -1,7 +1,6 @@
-import { Baileys, checkPermissions, CmdCtx, coolValues, getCtx } from '../../map.js'
+import { Baileys, checkPermissions, CmdCtx, coolValues, delay, getCtx } from '../../map.js'
 import { type proto } from 'baileys'
 import { getFixedT } from 'i18next'
-import { Duration } from 'luxon'
 
 // messages upsert event
 export default async function (bot: Baileys, raw: { messages: proto.IWebMessageInfo[] }, e: str) {
@@ -31,9 +30,9 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 			continue // you got censored OOOOMAGAAAA
 		}
 
+		// get locales function
+		const t = getFixedT(user.lang)
 		const ctx: CmdCtx = {
-			// get locales function
-			t: getFixedT(user.lang),
 			sendUsage, // sends cmd help menu
 			group,
 			args,
@@ -41,21 +40,17 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 			bot,
 			cmd,
 			msg,
+			t,
 		}
 
 		const cooldown = user.lastCmd.time + cmd.cooldown * 1_000 - Date.now()
-		if (cooldown > 699) { // i don't need to be so strict with cooldownds
-			const time = Duration // bc it's a small bot
-				.fromMillis(cooldown)
-				.rescale()
-				.shiftTo('seconds')
-				.toHuman({ unitDisplay: 'long' })
+		if (cooldown > 0) {
+			bot.send(msg, 'events.cooldown'.t(user.lang, { time: cooldown.duration(true) }))
+			// warns user about cooldown
 
-			bot.send(
-				msg,
-				`[📛] - Hold on! You need to wait *${time}* before executing another command.`,
-			)
-			continue
+			bot.react(msg, 'clock')
+			await delay(cooldown)
+			// wait until it gets finished
 		}
 
 		user.addCmd() // 1+ on user personal cmds count

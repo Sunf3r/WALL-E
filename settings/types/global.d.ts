@@ -11,7 +11,7 @@ interface String {
 	encode(): str
 	toPascalCase(): str
 	align(limit: num, char?: str, endPosition?: bool): str
-	t(lang: str): str
+	t(lang: str, options?: any): str
 	filterForRegex(): str
 	toMs(): [num, str[]]
 	bold(): str

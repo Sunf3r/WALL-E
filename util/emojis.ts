@@ -7,6 +7,7 @@ export default {
 	loading: '⌛',
 	block: '⛔',
 	think: '💭',
+	clock: '🕓',
 	ok: '✅',
 	x: '❌',
 }

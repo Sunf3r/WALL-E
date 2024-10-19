@@ -14,8 +14,7 @@ import { readFile } from 'node:fs/promises'
 export default class extends Cmd {
 	constructor() {
 		super({
-			alias: ['s', 'sexo', 'makesticker'],
-			cooldown: 0,
+			alias: ['s', 'sexo'],
 		})
 	}
 

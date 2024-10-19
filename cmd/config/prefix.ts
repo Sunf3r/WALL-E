@@ -2,9 +2,7 @@ import { Cmd, CmdCtx } from '../../map.js'
 
 export default class extends Cmd {
 	constructor() {
-		super({
-			alias: ['prefixo'],
-		})
+		super({})
 	}
 
 	async run({ t, user, msg, bot, args, sendUsage }: CmdCtx) {
