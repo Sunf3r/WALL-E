@@ -4,13 +4,14 @@ import { inspect } from 'node:util'
 import { getFixedT } from 'i18next'
 import { bot } from '../map.js'
 import chalk from 'chalk'
+import pino from 'pino'
 
 // get 'now' date time formatted
-const now = () =>
+const now = (format = 'TT') =>
 	DateTime.now()
 		.setZone(bot.region.timezone)
 		.setLocale(bot.region.logLanguage)
-		.toFormat('TT') // HOURS:MINITES:SECONDS
+		.toFormat(format) // TT = HOURS:MINITES:SECONDS
 
 export { now }
 
@@ -177,20 +178,29 @@ export default () => {
 		const str = fmtLog(title, msg, color)
 
 		console.info(str)
-		// it prints: [ TITLE | 18:04 | 69MB ] - msg (colored)
+		// it prints: [ 18:04:99.069 | 69MB | TITLE ] - msg (colored)
 		return
 	}
-	return
+
+	// Pino Logger
+	const logger = pino.default({
+		level: 'error',
+		transport: {
+			target: 'pino-pretty',
+			options: { ignore: 'pid,hostname' },
+		},
+	})
+	return logger
 }
 
 function fmtLog(title: str, msg: str, color: str) {
 	const brightColors = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']
+	const memory = process.memoryUsage().rss.bytes() as str
 
 	if (brightColors.includes(color)) color += 'Bright'
 
-	const str = `[${title.align(9)}| ${now()} | ${
-		(process.memoryUsage().rss.bytes() as str).align(6, ' ', true)
-	}] - ${msg}`
+	const str = `[ ${now('TT.SSS')} | ${memory.align(5)} |${title.align(9)}] - ${msg}`
+	// [ 18:04:99.069 | 69MB | TITLE ] - msg (colored)
 
 	return chalk.bold[color as 'red'](str)
 }

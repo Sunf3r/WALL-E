@@ -1,8 +1,8 @@
 import { Baileys, locale, proto, server } from './map.js'
 
-proto() // load prototypes
+const logger = proto() // load prototypes
 locale() // load locales
-const bot = new Baileys('settings/auth')
+const bot = new Baileys('settings/auth', logger)
 // auth/ contains auth info to login without scan QR Code again
 
 start()

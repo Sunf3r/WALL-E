@@ -27,7 +27,8 @@ async function getCtx(raw: proto.IWebMessageInfo, bot: Baileys) {
 	if (key.remoteJid?.includes('@g.us')) group = await bot.getGroup(key.remoteJid)
 
 	userID = userID!.split('@')[0].split(':')[0]
-	const user: User = await bot.cache.users.add(userID!, {}, [pushName!])
+	let user: User = bot.cache.users.get(userID)
+	if (!user) user = await bot.cache.users.add(userID!, {}, [pushName!])
 
 	let msg: Msg = {
 		key,

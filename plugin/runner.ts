@@ -9,12 +9,15 @@ const app = express()
 
 app
 	.use(express.json({ limit: '50mb' })) // content type: json
-	.get('/ping', async (_req, res) => res.sendStatus(200))
+	.get('/ping', async (_req, res) => {
+		res.status(200)
+	})
 	.post('/run', async (req, res) => {
 		const { lang, code, file } = req.body
 
-		if ((lang && code) || file) return res.send(runCode(lang, code, file))
-		res.send('missing data')
+		if ((lang && code) || file) res.send(runCode(lang, code, file))
+		else res.status(404)
+		return
 	})
 	.listen(
 		settings.runner.port,

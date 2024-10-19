@@ -11,7 +11,9 @@ const app = express()
 
 app
 	.use(express.json()) // use content-type: json
-	.get('/ping', async (_req, res) => res.sendStatus(200))
+	.get('/ping', async (_req, res) => {
+		res.status(200)
+	})
 	.listen(
 		settings.api.reminderPort,
 		() => console.log(`Reminder ready on port ${settings.api.reminderPort}!`),

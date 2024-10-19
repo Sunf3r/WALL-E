@@ -65,8 +65,8 @@ function isEmpty(value: unknown): bool { // check if a array/obj is empty
 		return value.length === 0 ||
 			value.some((item) => item === undefined || isEmpty(item))
 	} else if (typeof value === 'object') {
-		return Object.keys(value!).length === 0
-		//|| Object.values(value!).some((item) => item === undefined || isEmpty(item));
+		return Object.keys(value!).length === 0 ||
+			!Object.values(value!).some((item) => item !== undefined && item !== null)
 	}
 
 	return true
