@@ -3,7 +3,7 @@ import { Cmd, CmdCtx, prisma } from '../../map.js'
 export default class extends Cmd {
 	constructor() {
 		super({
-			aliases: ['re'],
+			aliases: ['re', 'lembrete'],
 		})
 	}
 
