@@ -4,6 +4,7 @@
  */
 
 export default {
+	sparkles: '✨',
 	loading: '⌛',
 	block: '⛔',
 	think: '💭',
