@@ -1,21 +1,21 @@
 # Settings
+baileys_store_multi.json
+**/Prisma/migrations
 **/config.json
 *.env
 auth/
-**/Prisma/migrations
-baileys_store_multi.json
 
 # Yarn
 .pnp.*
 .yarn*
 
 # Builds
-build/
 node_modules/
+build/
 
 # Logs / Lokefiles
-temp/*
 *lock.json
-*.lock
 **/*.log
-logs/
+*.lock
+temp/*
+logs/*
