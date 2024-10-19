@@ -6,6 +6,7 @@ const app = express()
 export function server(bot: Baileys) {
 	app
 		.use(express.json()) // use content-type: json
+		.get('/ping', async (_req, res) => res.sendStatus(200))
 		.post('/reminder', async (req, res) => { // method: post
 			const r: Reminder = req.body
 

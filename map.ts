@@ -52,7 +52,7 @@ export { api, bot, db, emojis, runner, sticker }
 
 // Classes
 import Collection from './class/collection.js'
-import { server } from './class/server.js'
+import { server } from './plugin/server.js'
 import Baileys from './class/baileys.js'
 import prisma from './util/prisma.js'
 import Group from './class/group.js'

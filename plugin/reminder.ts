@@ -1,5 +1,7 @@
 import settings from '../settings/settings.json' with { type: 'json' }
 import { prisma } from '../map.js'
+import express from 'express'
+const app = express()
 
 /** Reminder
  * This plugin will check evert 5s if there is a pending reminder
@@ -7,7 +9,14 @@ import { prisma } from '../map.js'
  * so the bot will remind the user on another process
  */
 
-console.log('Reminder ready!')
+app
+	.use(express.json()) // use content-type: json
+	.get('/ping', async (_req, res) => res.sendStatus(200))
+	.listen(
+		settings.api.reminderPort,
+		() => console.log(`Reminder ready on port ${settings.api.reminderPort}!`),
+	)
+
 setInterval(async () => {
 	let reminders = await prisma.reminders.findMany({
 		orderBy: { remindAt: 'asc' },
