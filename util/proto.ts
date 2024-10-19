@@ -56,7 +56,6 @@ export default () => {
 						const quantity = parseInt(m, 10)
 						const unit = m.replace(String(quantity), '')
 
-						print(quantity, unit)
 						const duration = Duration.fromObject({
 							days: unit === 'd' ? quantity : undefined, // Convert 'd' to 'days'
 							hours: unit === 'h' ? quantity : undefined,
