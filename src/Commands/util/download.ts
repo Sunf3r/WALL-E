@@ -45,7 +45,9 @@ export default class extends Command {
 
 			unlinkSync(path);
 		} catch (e: any) {
-			await bot.send(msg, `error: ${e?.stack || e}`);
+			// remove yt-dlp cli to prevent showing social password
+			e = (e?.stack || e).replace(ytdlArgs.join(' '), 'yt-dlp');
+			await bot.send(msg, `error: ${e}`);
 		}
 
 		return true;
