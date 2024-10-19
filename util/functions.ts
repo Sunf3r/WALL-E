@@ -207,9 +207,11 @@ async function cleanTemp() {
 }
 
 function getArgs(args: str[], msg: Msg, cmd: Cmd) {
-	if ((!args[0] || cmd.subCmds.includes(args[0].toLowerCase())) && msg?.quoted?.text) {
+	if ((!args[0] || (cmd.subCmds.includes(args[0].toLowerCase()) && !args[1]) ) && msg?.quoted?.text) {
 		let text = msg.quoted.text
 		const regex = /\.( |)[a-z]*( |)/gi
+
+		if (cmd.subCmds.includes(args[0].toLowerCase())) text = args[0] + text
 
 		if (text.match(regex)) text = text.replace(regex, '')
 
