@@ -1,5 +1,4 @@
 import { GroupMetadata, proto } from 'baileys';
-import { PrismaClient } from '@prisma/client';
 import Group from '../Classes/Group.ts';
 import User from '../Classes/User.ts';
 import { TFunction } from 'i18next';
@@ -23,7 +22,7 @@ type MsgTypes =
 	| 'location';
 
 interface Msg {
-	id: str;
+	key: proto.IMessageKey;
 	chat: str;
 	edited: bool;
 	text: str;
@@ -47,7 +46,6 @@ interface Cmd {
 }
 
 interface CmdContext {
-	prisma: PrismaClient;
 	msg: Msg;
 	user: User;
 	group: Group | undefined;
@@ -61,5 +59,6 @@ interface CmdContext {
 
 interface GroupMsg {
 	author: str;
+	group: str;
 	count: num;
 }

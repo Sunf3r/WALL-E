@@ -1,5 +1,8 @@
-import { GroupMetadata, GroupParticipant } from 'baileys';
+import { GroupMetadata, GroupParticipant, proto } from 'baileys';
 import prisma from '../Components/Prisma.js';
+import Message from './Message.js';
+import Collection from '../Plugins/Collection.js';
+import { Msg } from '../Typings/types.js';
 
 export default class Group {
 	id: str;
@@ -20,6 +23,7 @@ export default class Group {
 	invite?: str;
 	/** the person who added you */
 	author?: str;
+	cachedMsgs: Collection<string, Message>;
 
 	constructor(g: GroupMetadata) {
 		this.id = g.id;
@@ -35,28 +39,65 @@ export default class Group {
 		this.ephemeral = g.ephemeralDuration;
 		this.invite = g.inviteCode;
 		this.author = g.author;
+		this.cachedMsgs = new Collection({}, 100);
 	}
 
 	async addMsg(author: str) {
-	}
-
-	async getMsgs() {
-		return await prisma.msgs.findMany({
-			orderBy: {
-				count: 'desc',
+		await prisma.msgs.upsert({
+			where: {
+				author_group: {
+					author,
+					group: this.id,
+				},
+			},
+			create: {
+				author,
+				group: this.id,
+				count: 1,
+			},
+			update: {
+				count: { increment: 1 },
 			},
 		});
+		return;
 	}
 
-	async checkData() {
-		let data = await prisma.groups.findUnique({ where: { id: this.id } });
-
-		if (!data) {
-			data = await prisma.groups.create({
-				data: { id: this.id },
+	async getMsgs(author?: str) {
+		if (author) {
+			return await prisma.msgs.findUnique({
+				where: {
+					author_group: {
+						author,
+						group: this.id,
+					},
+				},
 			});
 		}
 
+		const msgs = await prisma.msgs.findMany({
+			where: {
+				group: this.id,
+			},
+		});
+
+		return msgs;
+	}
+
+	getCachedMsgs (limit?: number): Message[] {
+		let arrayMsgs: Message[] = [];
+		this.cachedMsgs.forEach(m => arrayMsgs.push(m));
+		arrayMsgs.reverse();
+
+		if (limit) arrayMsgs.length = limit;
+	
+		return arrayMsgs;
+	}
+
+	cacheMsg (msg: Msg) {
+		return this.cachedMsgs.set(msg.key.id as string, new Message(msg));
+	}
+
+	async checkData() {
 		return this;
 	}
 }

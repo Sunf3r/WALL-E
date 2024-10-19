@@ -42,18 +42,19 @@ export default class extends Command {
 				audio: file!,
 				mimetype: 'audio/mpeg',
 				fileName: `audio.mp3`,
-				ptt: true,
+				// ptt: true,
 			};
 		}
 
-		ytdlArgs.push(
-			`-o ${path}`,
-			`-u "${process.env.SOCIAL_USERNAME}"`,
-			`-p "${process.env.SOCIAL_PASSWORD}"`,
-		);
+		ytdlArgs.push(`-o ${path}`);
+
+		if (!args[1].includes('tiktok.com')) ytdlArgs.push(
+`-u "${process.env.SOCIAL_USERNAME}"`,
+                        `-p "${process.env.SOCIAL_PASSWORD}"`,
+		)
 
 		try {
-			bot.send(msg, t(`download.${isVideo}`));
+			await bot.send(msg, t(`download.${isVideo}`));
 			execSync(`yt-dlp ${ytdlArgs.join(' ')} ${args[1]}`);
 
 			const file = readFileSync(path);
@@ -73,16 +74,11 @@ export default class extends Command {
 }
 
 function attachMedia(obj: msgMedia, data: Buffer, path: str) {
-	const stat = statSync(path);
+	const size = statSync(path).size.bytes(true) as number;
 
-	if (obj.audio) {
-		if (stat.size / 1024 / 1024 < 10) return obj.audio = data;
+	if (obj.video && size < 40) return obj.video = data;
 
-		delete obj.audio;
-		return obj.document = data;
-	}
-
-	if (stat.size / 1024 / 1024 < 40) return obj.video = data;
+	if (size < 5) return obj.audio = data;
 
 	delete obj.video;
 	return obj.document = data;
