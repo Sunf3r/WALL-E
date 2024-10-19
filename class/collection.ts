@@ -22,7 +22,7 @@ export default class Collection<K, V> extends Map {
 				: new this.base(key, ...extra!)
 		}
 
-		this.set(key, value)
+		this.set(key, value as V)
 
 		if (this.limit && this.size > this.limit) {
 			const iter = this.keys()
