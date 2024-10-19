@@ -20,22 +20,22 @@ export default class extends Command {
 		let evaled, title;
 
 		try {
-			// Roda o eval em uma função assíncrona se ele conter a palavra "await"
+			// Run eval in async function if it contains 'await'
 			evaled = code.includes('await')
 				? await eval(`(async () => { ${code} })()`)
 				: await eval(code);
 
-			title = '🎉 Retorno'; // Título da msg
-			evaled = inspect(evaled, { depth: null }); // Retorno do eval
+			title = '[✅] Return'; // Msg title
+			evaled = inspect(evaled, { depth: null }); // eval result
 		} catch (error) {
-			title = '❌ Falha'; // Título da msg
-			evaled = error; // Retorno do eval
+			title = '[❌] Fail'; // Msg title
+			evaled = error;
 		} finally {
-			// Consumo de RAM ao final do eval
+			// RAM usage when the eval ends
 			const currentRam = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
 
-			const text = `⏰ *Duração:* ${Date.now() - startTime}ms\n` +
-				`🎞️ *RAM:* ${initialRam}/${currentRam}MB\n` +
+			const text = `*[⏰] Duration:* ${Date.now() - startTime}ms\n` +
+				`*[🎞️] RAM:* ${initialRam}/${currentRam}MB\n` +
 				`*${title}:*\n\n ` + '```\n' + evaled + '```';
 
 			return await ctx.bot.send(ctx.msg, text);

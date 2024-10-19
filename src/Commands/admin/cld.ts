@@ -20,19 +20,19 @@ export default class extends Command {
 		try {
 			output = execSync(ctx.args.join(' ') || '').toString();
 
-			title = '🎉 Retorno'; // Título da msg
+			title = '[✅] Result'; // Msg title
 		} catch (error) {
-			title = '❌ Falha'; // Título da msg
-			output = String(error); // Retorno do eval
+			title = '[❌] Fail'; // Msg title
+			output = String(error); // process return
 		} finally {
 			output = output!.trim();
 
-			// Consumo de RAM ao final do processo
+			// RAM usage when the process ends
 			const currentRam = (process.memoryUsage().rss / 1024 / 1024).toFixed(2);
 
-			const text = `⏰ *Duração:* ${Date.now() - startTime}ms\n` +
-				`🎞️ *RAM:* ${initialRam}/${currentRam}MB\n` +
-				`*${title}:*\n\n ` + '```\n' + (output || '- Sem retorno.') + '```';
+			const text = `*[⏰] Duration:* ${Date.now() - startTime}ms\n` +
+				`*[🎞️] RAM:* ${initialRam}/${currentRam}MB\n` +
+				`*${title}:*\n\n ` + '```\n' + output + '```';
 
 			return await ctx.bot.send(ctx.msg, text);
 		}
