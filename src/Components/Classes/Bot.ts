@@ -20,12 +20,12 @@ import User from './User';
 
 export default class Bot {
 	sock!: ReturnType<typeof makeWASocket>;
-	wait: Collection; //<string, Function>;
-	groups: Collection; //<string, GroupMetadata>;
-	users: Collection; //<string, User>;
-	events: Collection; //<string, Function>;
-	cmds: Collection; //<string, Cmd>;
-	aliases: Collection; //<string, string>;
+	wait: Collection<string, Function>;
+	groups: Collection<string, Group>;
+	users: Collection<string, User>;
+	events: Collection<string, Function>;
+	cmds: Collection<string, Cmd>;
+	aliases: Collection<string, string>;
 
 	constructor(public auth: string, public logger: Logger) {
 		this.logger = logger;
@@ -71,10 +71,10 @@ export default class Bot {
 		// save login creds
 
 		// Loading commands
-		await this.folderHandler(`../Commands`, this.loadCommands);
+		await this.folderHandler(`../../Commands`, this.loadCommands);
 		// folderHandler() reads a folder and call the function
 		// for each file
-		this.folderHandler(`../Events`, this.loadEvents);
+		this.folderHandler(`../../Events`, this.loadEvents);
 		// Loading Events
 	}
 

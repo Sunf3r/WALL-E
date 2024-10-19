@@ -13,9 +13,6 @@ export default async function (this: bot, raw: { messages: proto.IWebMessageInfo
 	// get msg obj
 	const { msg, group, user, prisma } = await getCtx(raw.messages[0], this);
 
-	// message log
-	appendFile('log/messages.log', inspect(msg, { depth: null }), () => {});
-
 	// run 'waitFor' events
 	if (this.wait.has(e)) this.wait.get(e)!.bind(this)(msg);
 
