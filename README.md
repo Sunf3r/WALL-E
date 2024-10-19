@@ -1,6 +1,6 @@
 # ⭐ WALL-E ⭐
 
-### ✨ WALL-E is an WhatsApp chat bot with some cool features. ✨
+### ✨ WALL-E is a WhatsApp chat bot with some cool features. ✨
 
 > ⚠️ » _WALL-E is still under development, feel free to contribute to this repo and leave a_ ⭐
 
@@ -25,6 +25,10 @@
 
 ### `1 -` 🛠️ Install these tools to get started:
 
+- [DENO](https://deno.com/)
+
+> ⚠️ » _Recommended version: 1.38 or higher_
+
 - [NodeJS](https://nodejs.org/pt-br/)
 
 > ⚠️ » _Recommended version: 20 or higher_
@@ -43,10 +47,6 @@
 
 **OPTIONAL TOOLS REQUIRED ONLY TO RUN CODE:**
 
-- [DENO](https://deno.com/)
-
-> ⚠️ » _Recommended version: 1.38 or higher_
-
 - [LUA](https://www.lua.org/)
 
 > ⚠️ » _Recommended version: 5.4 or higher_
@@ -58,7 +58,7 @@
 ### `2 -` 📁 Download or clone the repository:
 
 ```bash
-Code > Download ZIP
+Button "Code" > "Download ZIP"
 
 or
 
