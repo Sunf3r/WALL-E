@@ -84,10 +84,6 @@ export default class Group {
 		return msgs
 	}
 
-	getMsgs(limit?: number) {
-		return this.msgs.entries()
-	}
-
 	async checkData() {
 		// I don't save any data of groups, but I let this func here bc
 		// if some day I store groups data,

@@ -5,8 +5,9 @@
  * Cache saved on setings/cache/*.json
  */
 
-import { readFile, writeFile } from 'fs/promises'
 import { Baileys, Cmd, Collection, Group, User } from '../map.js'
+import { mkdir, readFile, writeFile } from 'fs/promises'
+import { existsSync } from 'fs'
 
 const cachedData = ['users', 'groups']
 
@@ -41,6 +42,9 @@ export default class CacheManager {
 	}
 
 	async save() {
+		if (!existsSync('settings/cache')) await mkdir('settings/cache')
+		// await Deno.mkdir('settings/cache'))
+
 		for (const category of cachedData) {
 			const collection = this[category as 'cmds']
 			const str = JSON.stringify(collection.toJSON()) // converts data to String

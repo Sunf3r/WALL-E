@@ -4,6 +4,7 @@ export default class extends Cmd {
 	constructor() {
 		super({
 			cooldown: 10,
+			subCmds: ['reverse'],
 		})
 	}
 
@@ -21,10 +22,14 @@ export default class extends Cmd {
 		}
 		// the bot can only delete up to 200 cached msgs
 
-		const msgs = group.getMsgs(amount)
-		for (const [k, v] of msgs) {
-			await bot.deleteMsg(v.key) // delete msg for everyone
-			group.msgs.delete(Number(k)) // delete it from cache
+		let msgs = group.msgs.map((m) => m.key)
+
+		if (this.subCmds[0] === args[1]) msgs = msgs.reverse()
+		// it will delete latest msgs first
+
+		for (const m of msgs) {
+			await bot.deleteMsg(m) // delete msg for everyone
+			group.msgs.delete(m.id) // delete it from cache
 
 			await delay(500)
 		}
