@@ -3,7 +3,7 @@
 	"type": "module",
 	"exports": "./build/main.js",
 	"engines": {
-		"node": ">=20"
+		"node": ">=22"
 	},
 	"scripts": {
 		"setup": "npm install -g typescript pm2 prisma && npm run prisma:push && npm install && pipx install rembg; npm start",
