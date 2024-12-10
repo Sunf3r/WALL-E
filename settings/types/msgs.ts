@@ -10,6 +10,7 @@ const visualTypes = {
 	'ptvMessage': 'video',
 	'videoMessage': 'video',
 	'imageMessage': 'image',
+	'viewOnceMessageV2': 'image',
 	'stickerMessage': 'sticker',
 }
 

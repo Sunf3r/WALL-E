@@ -17,7 +17,7 @@ export default class extends Cmd {
 			.catch((e) => {})
 
 		if (!Buffer.isBuffer(buffer)) {
-			target = (group || user).msgs.get(target.key.id)
+			target = (group || user).msgs.get(target.key?.id)
 			buffer = await bot.downloadMedia(target)
 				.catch((e) => {})
 

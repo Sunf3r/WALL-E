@@ -1,5 +1,5 @@
 import settings from '../settings/settings.json' with { type: 'json' }
-import { api, Baileys, gemini } from '../map.js'
+import { api, Baileys, gemini, User } from '../map.js'
 import express from 'express'
 const app = express()
 
@@ -29,7 +29,7 @@ function start(bot: Baileys, resolve: Function) {
 
 async function sendReminders(bot: Baileys, r: Reminder) {
 	try {
-		const user = await bot.getUser({ id: r.author })
+		const user = await bot.getUser({ id: r.author }) as User
 		const lang = `langs.${user!.lang}`.t('en') || 'Portuguese'
 
 		let text = `\`${r.msg.replaceAll('`', '\`')}\`\n@${user.phone}`

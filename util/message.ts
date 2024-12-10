@@ -28,7 +28,6 @@ async function getCtx(raw: proto.IWebMessageInfo, bot: Baileys): Promise<CmdCtx>
 	if (key.participant) phone = key.participant!
 
 	let user = await bot.getUser({ phone })
-	if (pushName && pushName !== user.name) user.name = pushName
 
 	let msg: Msg = {
 		key,
@@ -43,15 +42,22 @@ async function getCtx(raw: proto.IWebMessageInfo, bot: Baileys): Promise<CmdCtx>
 		raw, // raw msg obj
 	}
 
-	const input = getInput(msg, bot, user.prefix) // ignores non-prefixed msgs
-	msg.text = input.msg.text // it may change msg.text by msg.quoted.text
-	// so when someone asks something
-	// you can type `.g` and search it
+	let args: str[] = []
+	let cmd
+	if (user) {
+		if (pushName && pushName !== user.name) user.name = pushName
+		const input = getInput(msg, bot, user.prefix) // ignores non-prefixed msgs
+		msg.text = input.msg.text // it may change msg.text by msg.quoted.text
+		// so when someone asks something
+		// you can reply it with `.g` and search it
+		args = input.args
+		cmd = input.cmd
+	}
 
 	return {
 		msg,
-		args: input.args, // cmd args
-		cmd: input.cmd,
+		args,
+		cmd,
 		user,
 		group: group!,
 	} as CmdCtx
@@ -92,7 +98,7 @@ function getInput(msg: Msg, bot: Baileys, prefix: str) {
 }
 
 // getQuoted: get the quoted msg of a raw msg
-function getQuoted(raw: proto.IWebMessageInfo, user: User | Group) {
+function getQuoted(raw: proto.IWebMessageInfo, chat: User | Group) {
 	const m = raw.message!
 
 	//@ts-ignore 'quotedMessage' is missing on lib types
@@ -110,18 +116,12 @@ function getQuoted(raw: proto.IWebMessageInfo, user: User | Group) {
 		raw: { message: quotedRaw }, // raw quote msg obj
 	} as Msg
 
-	let cachedMsg = user.msgs.find((m) =>
+	let cachedMsg = chat.msgs.find((m) =>
 		// compare quoted msg with cached msgs
-		m.type === quoted.type &&
-		m.isMedia === quoted.isMedia &&
-		m.text === quoted.text &&
-		m.mime === quoted.mime &&
-		Object.entries(quoted.raw.message!).every(([k, v]) => {
-			const data = m.raw?.message![k as 'chat']
-
-			if (typeof data === 'object') return true
-			return data === v
-		})
+		quoted?.type === m.type &&
+		quoted?.isMedia === m.isMedia &&
+		quoted?.text === m.text &&
+		quoted?.mime === m.mime
 	)
 
 	return quoted || cachedMsg

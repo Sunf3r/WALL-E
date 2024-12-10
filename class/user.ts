@@ -109,34 +109,43 @@ export default class User {
 
 	// checkData: sync user data on cache/db
 	async checkData() {
-		let data = await prisma.users.findFirst({
-			where: {
-				OR: [
-					{ phone: this.phone },
-					{ id: this.id },
-				],
-			}, // fetch it
-		})
-
-		if (!data) {
-			data = await prisma.users.create({
-				data: { // create a new user
-					phone: this.phone,
-					name: this._name, // default values
-					lang: this._lang,
-					prefix: this._prefix,
-				},
+		try {
+			let data = await prisma.users.findFirst({
+				where: {
+					OR: [
+						{ phone: this.phone },
+						{ id: this.id },
+					],
+				}, // fetch it
 			})
+
+			if (!data) {
+				data = await prisma.users.create({
+					data: { // create a new user
+						phone: this.phone,
+						name: this._name, // default values
+						lang: this._lang,
+						prefix: this._prefix,
+					},
+				})
+			}
+
+			// update cache
+			this.id = data.id
+			this.phone = data.phone
+			this._name = data.name
+			this._lang = data.lang
+			this._prefix = data.prefix
+			this._cmdsCount = data.cmds
+
+			return this
+		} catch (e) {
+			print('CHECKUSERDATA ERROR', e, 'red')
+			print('User data:', {
+				phone: this.phone,
+				id: this.id,
+			})
+			return
 		}
-
-		// update cache
-		this.id = data.id
-		this.phone = data.phone
-		this._name = data.name
-		this._lang = data.lang
-		this._prefix = data.prefix
-		this._cmdsCount = data.cmds
-
-		return this
 	}
 }

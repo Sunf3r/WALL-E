@@ -12,6 +12,7 @@ async function start() {
 }
 
 process // "anti-crash" to handle lib instabilities
+	.on('SIGINT', async (_e) => await bot.cache.save()) // save cache before exit
 	.on('uncaughtException', (e) => console.error(e, `Uncaught Excep.:`))
 	.on('unhandledRejection', (e: Error) => console.error(e, `Unhandled Rej:`))
 	.on('uncaughtExceptionMonitor', (e) => console.error(e, `Uncaught Excep.M.:`))
