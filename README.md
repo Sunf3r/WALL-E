@@ -123,13 +123,16 @@ You can configure the bot however you want in the following files:
 # This script will do everything to prepare the bot for
 # the first time, but you need to do steps 1~3 first
 npm run setup
-# It will: install tsc/pm2/prisma as global pkgs, push db schema
-# install dependencies, generate prisma schema, build the bot and
-# start it with pm2
+# It will: install tsc/pm2/prisma as global pkgs, push db schema,
+# install node dependencies, create python virtual environment
+# install python dependencies, generate prisma schema
+# build the bot and start it with pm2
 
 # Later, you can update everything just running:
 npm run update
-# It will: pull commits from repository, update node dependencies, update deno and bun, regenerate prisma schema,
+# It will: pull commits from repository,
+# update node dependencies, update deno and bun,
+# update python dependencies, generate prisma schema,
 # and rebuild the bot
 ```
 
