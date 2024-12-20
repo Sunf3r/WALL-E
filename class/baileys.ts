@@ -56,7 +56,8 @@ export default class Baileys {
 			browser: Browsers.macOS('Desktop'),
 			// ignore status updates
 			shouldIgnoreJid: (jid: str) =>
-				jid?.includes('broadcast') || jid?.includes('newsletter'),
+				jid?.includes('broadcast') || jid?.includes('newsletter') ||
+				jid?.includes('13135550002@s.whatsapp.net'),
 			getMessage: this.getMsg.bind(this), // get stored msgs to resent failed ones
 		})
 		this.store?.bind(this.sock.ev)

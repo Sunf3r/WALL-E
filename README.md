@@ -31,7 +31,7 @@
 
 - [NodeJS 💩](https://nodejs.org/pt-br/) (For WALL-E/Runner/Reminder)
 
-> 🪧 » _Recommended version: 20 or higher_
+> 🪧 » _Recommended version: 22 or higher_
 
 - [PostgreSQL 🐘](https://www.postgresql.org/download/) (For database)
 
@@ -41,22 +41,21 @@
 
 - FFMPEG (For gif stickers)
 
-> 🪧 » _You need to install it on your system_ _Run `sudo apt install ffmpeg` for Debian/Ubuntu_
+> 🪧 » Run `sudo apt install ffmpeg` to install it on Debian/Ubuntu
 
 - [Python 🐍](https://www.python.org/) (For rmbg plugin)
 
-> 🪧 » _Recommended version: 3.12 or higher_ _Run `sudo apt install pipx` to install Package
-> Installer for Python_
+> 🪧 » _Recommended version: 3.12 or higher_
 
 **WALL-E also support these languages, but you DON'T need to install it if you won't use:**
 
 - [BUN 🧁](https://bun.sh) (Can be used to run the runner)
 
-> 🪧 » _Recommended version: 1.1.34 or higher_
+> 🪧 » _Recommended version: 1.1.41 or higher_
 
 - [DENO 🦕](https://deno.com/)
 
-> 🪧 » _Recommended version: 2.04 or higher_
+> 🪧 » _Recommended version: 2.1.4 or higher_
 
 - [LUAJIT 🌙](https://luajit.org/)
 
@@ -120,32 +119,62 @@ You can configure the bot however you want in the following files:
 > 💡 » _Open the folder in terminal_
 
 ```bash
+cd WALL-E
+
 # This script will do everything to prepare the bot for
 # the first time, but you need to do steps 1~3 first
 npm run setup
-# It will: install tsc/pm2/prisma as global pkgs, push db schema,
-# install node dependencies, create python virtual environment
-# install python dependencies, generate prisma schema
-# build the bot and start it with pm2
+# It will: install tsc/pm2/prisma as global modules,
+# push db schema, install node modules,
+# generate prisma schema, build source,
+# create python virtual environment,
+# install python dependencies,
+# and >start services< with pm2
 
-# Later, you can update everything just running:
+# To stop all services:
+npm run stop
+
+# To start it again:
+npm start
+```
+
+### `4 -` 🔐 Log in:
+
+## Just scan the QR Code that will appear on terminal and then it's ready!
+> ⚠️ » All logs will appear on `settings/logs/walle.log`.
+
+# `-1.` 🗒️ Important Notes:
+
+- Updating:
+```
+# Stopping services
+npm run stop
+
+# You can update everything just running:
 npm run update
 # It will: pull commits from repository,
-# update node dependencies, update deno and bun,
+# update node modules, update deno and bun,
 # update python dependencies, generate prisma schema,
-# and rebuild the bot
+# and rebuild source
+# update won't start services.
+
+# Starting services
+npm start
 ```
 
 > ⚠️ » _None of these scripts will update `Python`, `LuaJIT`, `PostgreSQL`, `G++` or `GIT`. You
 > still need to do it by yourself_
 
-### `4 -` 🔐 Log in:
-
-## Just scan the QR Code that will appear on terminal and then it's ready!
-
-# `-1.` 🗒️ Notes:
-
-- I recommend you to clean cache and log out WhatsApp Web sometimes to fix decrypt bugs
+- I recommend you to reset and log out WhatsApp Web sometimes to fix decrypt bugs
+```
+# Stopping services
+npm run stop
+# Cleaning auth, cache, temp and logs
+npm run reset
+# Starting all services
+npm start
+# Scan QR Code
+```
 
 - Experiencing bugs? Open a issue with your problem or make a pull request with the solution. I will
   try to fix it as soon as possible.
