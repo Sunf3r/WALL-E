@@ -122,7 +122,7 @@ You can configure the bot however you want in the following files:
 cd WALL-E
 
 # This script will do everything to prepare the bot for
-# the first time, but you need to do steps 1~3 first
+# *the first time, but you need to do steps 1~3 first*
 npm run setup
 # It will: install tsc/pm2/prisma as global modules,
 # push db schema, install node modules,
@@ -141,11 +141,13 @@ npm start
 ### `4 -` 🔐 Log in:
 
 ## Just scan the QR Code that will appear on terminal and then it's ready!
+
 > ⚠️ » All logs will appear on `settings/logs/walle.log`.
 
 # `-1.` 🗒️ Important Notes:
 
 - Updating:
+
 ```
 # Stopping services
 npm run stop
@@ -166,6 +168,7 @@ npm start
 > still need to do it by yourself_
 
 - I recommend you to reset and log out WhatsApp Web sometimes to fix decrypt bugs
+
 ```
 # Stopping services
 npm run stop
