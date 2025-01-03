@@ -41,8 +41,8 @@ export default class extends Cmd {
 		const matchMs = args.join(' ').toMs() // convert string to ms
 		// '1s' => 1000ms
 
-		// sendUsage if time is invalid or less then 1m
-		if (!matchMs[0] || matchMs[0] <= 59_999 || matchMs[0] >= 31536000000) return sendUsage()
+		// sendUsage if time is invalid, less than 1m or more than 1y
+		if (!matchMs[0] || matchMs[0] <= 59_999 || matchMs[0] >= 31_536_000_000) return sendUsage()
 
 		const time = Date.now() + matchMs[0] // remind at this moment
 

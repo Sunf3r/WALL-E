@@ -11,6 +11,7 @@ app
 	.use(express.json({ limit: '50mb' })) // content type: json
 	.get('/ping', async (_req, res) => {
 		res.sendStatus(200)
+		return
 	})
 	.post('/run', async (req, res) => {
 		const { lang, code, file } = req.body
@@ -60,6 +61,7 @@ function runCode(lang: 'py', code = '', file: str) {
 
 		// i made it bc C++ error logs are strogonoffcaly large
 	}
+	return
 }
 
 function filterForRegex(str: str) {

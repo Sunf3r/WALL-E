@@ -22,10 +22,10 @@ module.exports = { // yea, i really need to use module.exports. don't rage!
 		node_args,
 		// interpreter: 'deno',
 		// interpreter_args: 'run',
-		instances: 4,
-		exec_mode: 'cluster',
+		// instances: 1,
+		// exec_mode: 'cluster',
 		log_file: 'settings/log/runner.log', // both error and output log
-		merge_logs: true, // merge logs from all intances
+		// merge_logs: true, // merge logs from all intances
 	}, {
 		name: 'reminder',
 		script: 'build/plugin/reminder.js',

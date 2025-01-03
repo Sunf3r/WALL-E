@@ -1,5 +1,5 @@
 import settings from '../settings/settings.json' with { type: 'json' }
-import { prisma } from '../map.js'
+import prisma from '../util/prisma.js'
 import express from 'express'
 const app = express()
 
@@ -13,6 +13,7 @@ app
 	.use(express.json()) // use content-type: json
 	.get('/ping', async (_req, res) => {
 		res.sendStatus(200)
+		return
 	})
 	.listen(
 		settings.api.reminderPort,
@@ -45,4 +46,5 @@ setInterval(async () => {
 			)
 			.catch((e) => console.log(r, e.message))
 	}
+	return
 }, 1_000 * 60)
