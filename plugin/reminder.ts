@@ -4,7 +4,7 @@ import express from 'express'
 const app = express()
 
 /** Reminder
- * This plugin will check evert 5s if there is a pending reminder
+ * This plugin will check every 5s if there is a pending reminder
  * and when its time gets over, sends reminder request to main thread
  * so the bot will remind the user on another process
  */
