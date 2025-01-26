@@ -21,7 +21,7 @@
 - [x] Mass delete group msgs for all members;
 - [x] Mention all users in a group in a single msg;
 - [x] Run code in multiple programming languages;
-- [ ] Download videos and audios from many websites;
+- [x] Download videos and audios from many websites;
 
 **and more.**
 
@@ -33,23 +33,25 @@
 
 > 🪧 » _Recommended version: 22 or higher_
 
+**OPTIONAL TOOLS**
+
 - [PostgreSQL 🐘](https://www.postgresql.org/download/) (For database)
 
 > 🪧 » _Recommended version: 16 or higher_
-
-**OPTIONAL TOOLS**
+> Database is required to use some cmds like rank/remind or to permanently save users prefix/language.
+> but you can run it without a database.
 
 - FFMPEG (For gif stickers)
 
 > 🪧 » Run `sudo apt install ffmpeg` to install it on Debian/Ubuntu
 
-- [Python 🐍](https://www.python.org/) (For rmbg plugin)
+- [Python 🐍](https://www.python.org/) (For removing backgrounds)
 
 > 🪧 » _Recommended version: 3.12 or higher_
 
 **WALL-E also support these languages, but you DON'T need to install it if you won't use:**
 
-- [BUN 🧁](https://bun.sh) (Can be used to run the runner)
+- [BUN 🧁](https://bun.sh)
 
 > 🪧 » _Recommended version: 1.1.41 or higher_
 
@@ -113,6 +115,7 @@ You can configure the bot however you want in the following files:
 - `.env` (`settings/.env.example`)
 
 > 💡 » _Open the file to set sensitive keys and rename "`.env.example`" to "`.env`"_
+> if you have a database, remove the # before DATABASE_URL and set it
 
 ### `3 -` 🧰 Installing dependencies and starting 🚀:
 
@@ -125,24 +128,29 @@ cd WALL-E
 # *the first time, but you need to do steps 1~3 first*
 npm run setup
 # It will: install tsc/pm2/prisma as global modules,
-# push db schema, install node modules,
+# install node modules,
 # generate prisma schema, build source,
 # create python virtual environment,
 # install python dependencies,
 # and >start services< with pm2
+
+# if you have a database, this one will also push db schema
+npm run setup:full
 
 # To stop all services:
 npm run stop
 
 # To start it again:
 npm start
+# yea, you don't need "run" for start.
+# Just "npm start" instead of "npm run start"
 ```
 
 ### `4 -` 🔐 Log in:
 
 ## Just scan the QR Code that will appear on terminal and then it's ready!
 
-> ⚠️ » All logs will appear on `settings/logs/walle.log`.
+> ⚠️ » All logs and QR codes will appear on `settings/logs/walle.log`.
 
 # `-1.` 🗒️ Important Notes:
 
