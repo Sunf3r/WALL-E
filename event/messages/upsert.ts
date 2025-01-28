@@ -34,15 +34,17 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 		}
 
 		if (!cmd) continue
+		// get locales function
+		const t = getFixedT(user.lang)
+
 		// Check cmd permissions
 		const auth = checkPermissions(cmd, user, group)
 		if (auth !== true) {
+			if (auth === 'nodb') bot.send(msg, t('events.nodb'))
 			bot.react(msg, auth)
 			continue // you got censored OOOOMAGAAAA
 		}
 
-		// get locales function
-		const t = getFixedT(user.lang)
 		const ctx: CmdCtx = {
 			sendUsage, // sends cmd help menu
 			group,
@@ -56,10 +58,10 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 
 		const cooldown = user.lastCmd.time + cmd.cooldown * 1_000 - Date.now()
 		if (cooldown > 0) {
-			bot.send(msg, 'events.cooldown'.t(user.lang, { time: cooldown.duration(true) }))
+			await bot.send(msg, t('events.cooldown', { time: cooldown.duration(true) }))
 			// warns user about cooldown
 
-			bot.react(msg, 'clock')
+			await bot.react(msg, 'clock')
 			await delay(cooldown)
 			// wait until it gets finished
 		}
@@ -70,9 +72,9 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 		// bot.sock.sendPresenceUpdate('composing', msg.chat);
 
 		Promise.resolve(cmd.run!(ctx))
-			.catch((e) => {
+			.catch(async (e) => {
 				console.error(e, `EVENT/${e}`)
-				bot.send(msg, `[⚠️] ${e?.message || e}`)
+				await bot.send(msg, `[⚠️] ${e?.message || e}`)
 				bot.react(msg, 'x')
 			})
 
@@ -80,7 +82,7 @@ export default async function (bot: Baileys, raw: { messages: proto.IWebMessageI
 		async function sendUsage() {
 			args[0] = cmd.name
 
-			bot.cache.cmds.get('help').run(ctx)
+			await bot.cache.cmds.get('help').run(ctx)
 			bot.react(msg, '🤔')
 			return
 		}
