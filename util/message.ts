@@ -35,6 +35,7 @@ async function getCtx(raw: proto.IWebMessageInfo, bot: Baileys): Promise<CmdCtx>
 	let msg: Msg = {
 		key,
 		chat: key?.remoteJid!, // msg chat id
+		author: user?.phone!,
 		type,
 		text: getMsgText(message!),
 		edited: Object.keys(message!)[0] === 'editedMessage', // if the msg is edited

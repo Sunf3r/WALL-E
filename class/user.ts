@@ -4,6 +4,7 @@ import { Content } from '@google/generative-ai'
 export default class User {
 	id: num
 	phone: str
+	warns: str[]
 
 	_name: str
 	_lang: str
@@ -21,6 +22,7 @@ export default class User {
 	constructor(data: Partial<User>) {
 		this.id = data.id || 0
 		this.phone = (data.phone || '').parsePhone()
+		this.warns = []
 
 		this._name = data._name || 'name'
 		this._cmdsCount = data._cmdsCount || 0

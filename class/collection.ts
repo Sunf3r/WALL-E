@@ -144,6 +144,11 @@ export default class Collection<K, V> extends Map {
 		return item
 	}
 
+	// Reverse: reverse items on a array
+	reverse(): V[] {
+		return this.map((i) => i).reverse()
+	}
+
 	// toJSON: Returns a JSON object containing the id: value pairs
 	toJSON() {
 		const json = {}

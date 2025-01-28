@@ -33,6 +33,7 @@ type MsgTypes =
 interface Msg {
 	key: proto.IMessageKey
 	chat: str
+	author: str
 	edited: bool
 	text: str
 	type: MsgTypes
