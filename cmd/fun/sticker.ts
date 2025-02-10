@@ -20,13 +20,13 @@ export default class extends Cmd {
 	}
 
 	async run({ msg, bot, args, user, group, sendUsage, t }: CmdCtx) {
-		if (!user.warns.find((i) => i === 'MS')) {
-			await bot.send(
-				msg,
-				'[💡] Agora você pode fazer figurinhas de várias imagens enviando ".s" depois delas.',
-			)
-			user.warns.push('MS')
-		}
+		// if (!user.warns.find((i) => i === 'MS')) {
+		// 	await bot.send(
+		// 		msg,
+		// 		'[💡] Agora você pode fazer figurinhas de várias imagens enviando ".s" depois delas.',
+		// 	)
+		// 	user.warns.push('MS')
+		// }
 
 		let target = isVisual(msg.type) ? msg : (isVisual(msg?.quoted?.type) ? msg.quoted : null)
 		// target = user msg or user quoted msg

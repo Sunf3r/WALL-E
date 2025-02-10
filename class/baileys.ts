@@ -35,7 +35,7 @@ export default class Baileys {
 		// const { version } = await fetchLatestBaileysVersion()
 		/** WA is showing fake versions to ban bots. DO NOT UNCOMMENT IT */
 
-		const version: [num, num, num] = [2, 3000, 1017531287]
+		const version: [num, num, num] = [2, 3000, 1019707846]
 		// This version is secure
 		print('NET', `Connecting to WA v${version.join('.')}`, 'green')
 
@@ -58,7 +58,7 @@ export default class Baileys {
 			shouldIgnoreJid: (jid: str) =>
 				jid?.includes('broadcast') || jid?.includes('newsletter') ||
 				jid?.includes('13135550002@s.whatsapp.net'),
-			getMessage: this.getMsg.bind(this), // get stored msgs to resent failed ones
+			// getMessage: this.getMsg.bind(this), // get stored msgs to resent failed ones
 		})
 		this.store?.bind(this.sock.ev)
 

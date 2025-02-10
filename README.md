@@ -37,9 +37,8 @@
 
 - [PostgreSQL 🐘](https://www.postgresql.org/download/) (For database)
 
-> 🪧 » _Recommended version: 16 or higher_
-> Database is required to use some cmds like rank/remind or to permanently save users prefix/language.
-> but you can run it without a database.
+> 🪧 » _Recommended version: 16 or higher_ Database is required to use some cmds like rank/remind or
+> to permanently save users prefix/language. but you can run it without a database.
 
 - FFMPEG (For gif stickers)
 
@@ -114,8 +113,8 @@ You can configure the bot however you want in the following files:
 
 - `.env` (`settings/.env.example`)
 
-> 💡 » _Open the file to set sensitive keys and rename "`.env.example`" to "`.env`"_
-> if you have a database, remove the # before DATABASE_URL and set it
+> 💡 » _Open the file to set sensitive keys and rename "`.env.example`" to "`.env`"_ if you have a
+> database, remove the # before DATABASE_URL and set it
 
 ### `3 -` 🧰 Installing dependencies and starting 🚀:
 

@@ -16,5 +16,12 @@
 	"ts-node": {
 		"esm": true
 	},
-	"exclude": ["test", "build", "!plugin/*.ts", "settings/inactive", "plugin/copilot.ts"]
+	"exclude": [
+		"test",
+		"build",
+		"!plugin/*.ts",
+		"settings/inactive",
+		"plugin/copilot.ts",
+		"settings/temp"
+	]
 }

@@ -1,5 +1,5 @@
 import { FileMetadataResponse, FileState, GoogleAIFileManager } from '@google/generative-ai/server'
-import { aiPrompt, delay, makeTempFile, runner, User } from '../map.js'
+import { api, delay, makeTempFile, runner, User } from '../map.js'
 import {
 	EnhancedGenerateContentResponse,
 	GenerateContentResult,
@@ -32,20 +32,19 @@ async function imgRemover(img: str, quality: num) {
 	return await req.json()
 }
 
-async function gemini({ instruction, prompt, model, buffer, mime, user, callback }: aiPrompt) {
+async function gemini(
+	{ instruction, prompt, model, buffer, mime, user }: aiPrompt,
+): Promise<aiResponse> {
 	// Access your API key as an environment variable
 	const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY!)
 	const fileManager = new GoogleAIFileManager(process.env.GEMINI_KEY!)
 
-	let interval // callback interval
-	let text = '' // AI response text
 	let file: FileMetadataResponse // Prompt file
-	let result: GenerateContentStreamResult | GenerateContentResult // AI Result
-	let data: EnhancedGenerateContentResponse // request data
+	let result: GenerateContentResult // AI Result
 
 	// The Gemini 1.5 models are versatile and work with both text-only and multimodal prompts
 	const gemini = genAI.getGenerativeModel({
-		model,
+		model: model || api.aiModel.gemini,
 		safetySettings: [{ // won't block any potential dangerous content
 			category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
 			threshold: HarmBlockThreshold.BLOCK_NONE,
@@ -59,6 +58,7 @@ async function gemini({ instruction, prompt, model, buffer, mime, user, callback
 			category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
 			threshold: HarmBlockThreshold.BLOCK_NONE,
 		}],
+		systemInstruction: instruction,
 	})
 
 	if (buffer) { // include media buffer with text prompt
@@ -93,64 +93,31 @@ async function gemini({ instruction, prompt, model, buffer, mime, user, callback
 		prompt = [media, prompt as str]
 	}
 
-	try {
-		if (!callback || !user) { // only return text when it's done
-			if (typeof prompt === 'string') prompt = instruction + prompt
-			else prompt[1] = instruction + prompt // if it has media
+	if (!user) { // only return text when it's done
+		// if (typeof prompt === 'string') prompt = instruction + prompt
+		// else prompt[1] = instruction + prompt // if it has media
 
-			result = await gemini.generateContent(prompt)
-			text = result.response.text()
+		result = await gemini.generateContent(prompt)
 
-			return generateResponse(result.response)
-		}
-
-		// it's your conversation history
-		user.geminiCtx = [{ role: 'user', parts: [{ text: instruction }] }, ...user.geminiCtx]
-
-		/** Gemini dynamic chats:
-		 * A new chat will be created every time gemini() is called
-		 * it's useful to change model and keep 'AI memory' (history context)
-		 * it also allows to use dynamic initial instructions, so Gemini language
-		 * can be switched as bot user language.
-		 */
-		const chat = gemini.startChat({ history: user.geminiCtx })
-		result = await chat.sendMessageStream(prompt)
-
-		user.geminiCtx = await chat.getHistory() // save history
-		user.geminiCtx.shift() // remove initial instruction from history
-
-		// edit msg every .5s with new generated words
-		interval = setInterval(() => {
-			if (data) callback(generateResponse(data))
-		}, 500)
-
-		for await (const chunk of result.stream) {
-			data = chunk // save new generated text
-			text += chunk.text()
-		}
-
-		data = await result.response
-		text = data.text() // get final text
-		clearInterval(interval) // stop interval
-		// @ts-ignore last time editing msg
-		callback(generateResponse(data, true))
-	} catch (e: any) {
-		clearInterval(interval) // stop interval
-		console.error(e, 'API/GEMINI')
-		throw new Error(e.message) // throw it again so
-		// error will be handled by function that calls gemini()
+		return { text: result.response.text() }
 	}
 
-	function generateResponse(chunk?: EnhancedGenerateContentResponse, finish?: bool) {
-		return {
-			model, // AI Model
-			text: text.replaceAll('**', '*').replaceAll('##', '>'),
-			tokens: chunk?.usageMetadata?.promptTokenCount || 0,
-			// input + context tokens count
-			finish, // if it's the last chunk
-		} as aiResponse
+	/** Gemini dynamic chats:
+	 * A new chat will be created every time gemini() is called
+	 * it's useful to change model and keep 'AI memory' (history context)
+	 * it also allows to use dynamic initial instructions, so Gemini language
+	 * can be switched as bot user language.
+	 */
+	const chat = gemini.startChat({ history: user.geminiCtx })
+	result = await chat.sendMessage(prompt)
+
+	user.geminiCtx = await chat.getHistory()
+
+	return {
+		text: result.response!.text().replaceAll('**', '*').replaceAll('##', '>'),
+		tokens: result.response?.usageMetadata?.promptTokenCount || 0,
+		// input + context tokens count
 	}
-	return
 }
 
 async function xAI(user: User, prompt: str) {

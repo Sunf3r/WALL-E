@@ -35,13 +35,12 @@ async function sendReminders(bot: Baileys, r: Reminder) {
 		let text = `\`${r.msg.replaceAll('`', '\`')}\`\n@${user.phone}`
 
 		const aiMsg = await gemini({
-			instruction:
-				`Create only one humorous message to notify a user of a reminder in ${lang}.\nreminder: `,
-			prompt: r.msg,
+			prompt:
+				`Create a humorous message to notify a WhatsApp user of a reminder in ${lang}. Just respond with the reminder. Reminder: ${r.msg}`,
 			model: api.aiModel.gemini,
-		})
+		}).catch(() => {})
 
-		text += aiMsg?.text ? `, ${aiMsg?.text}` : ''
+		text += aiMsg?.text ? `, ${aiMsg.text}` : ''
 
 		// send remind msg
 		await bot.sock.sendMessage(r.chat, { text, mentions: [user.chat] })

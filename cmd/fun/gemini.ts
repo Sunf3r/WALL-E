@@ -29,7 +29,7 @@ export default class extends Cmd {
 		let buffer, mime, stream: Promise<CmdCtx> | CmdCtx
 		const language = `langs.${user.lang}`.t('en')
 		const instruction = // dynamic initial instruction
-			`Create a short, concise answer and, only if necessary, a long, detailed one. Always answer in ${language} and use bold for all important words and keywords.`
+			`You are a member of a WhatsApp group. Always do as asked, respond in ${language} and use bold for all important words and keywords`
 
 		if (msg.isMedia || msg?.quoted?.isMedia) {
 			const target = msg.isMedia ? msg : msg.quoted // include msg or quoted msg media
@@ -38,40 +38,24 @@ export default class extends Cmd {
 			mime = target.mime // media mimetype like image/png
 		}
 
-		await gemini({
-			instruction,
-			prompt: args.join(' '),
-			model,
-			buffer,
-			mime,
-			user,
-			callback,
-		}).catch((e) => {
+		try {
+			const data = await gemini({
+				instruction,
+				prompt: args.join(' '),
+				model,
+				buffer,
+				mime,
+				user,
+			})
+
+			await bot.send(msg.chat, ` - *${model}* (${data.tokens}):\n${data.text}`)
+			bot.react(msg, 'ok')
+		} catch (e: any) {
 			console.error(e, 'CMD/GEMINI')
 			bot.react(msg, 'x')
 			bot.send(msg, e.message.encode())
-		})
-
-		async function callback({ text, tokens, finish }: aiResponse) {
-			// Gemini will call this function every .5s to send or edit response updates
-			const response = ` - *${model}* (${tokens}):\n${text}`
-
-			if (!stream) stream = bot.send(msg, response).then((m) => stream = m)
-			// if it's the last chunk (final response)
-			else if (finish) return bot.editMsg((await stream).msg, response)
-			// wait msg is sent and edit it
-			/** I did it bc
-			 * sometimes Gemini API may generate all chunks
-			 * faster than WhatsApp can send msgs. It could cause
-			 * some content loss on this cmd. So, when it's finish
-			 * bot will wait until msg is sent
-			 */
-			// @ts-ignore only try to edit when it was really sent
-			else if (stream.msg) bot.editMsg(stream.msg, response)
-			return
 		}
 
-		bot.react(msg, 'ok')
 		return
 	}
 }

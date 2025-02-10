@@ -33,9 +33,16 @@ interface Reminder {
 	isDone: bool
 }
 
+interface aiPrompt {
+	instruction?: str
+	prompt: str | [Part, str]
+	model?: str
+	buffer?: Buf
+	mime?: str
+	user?: User
+}
+
 interface aiResponse {
-	model: str
 	text: str
-	tokens: num
-	finish?: bool
+	tokens?: num
 }

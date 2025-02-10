@@ -61,14 +61,4 @@ interface GroupMsg {
 	count: num
 }
 
-interface aiPrompt {
-	instruction: str
-	prompt: str | [Part, str]
-	model: str
-	buffer?: Buf
-	mime?: str
-	user?: User
-	callback?(data: aiResponse): Promise<any>
-}
-
 export { aiPrompt, CmdCtx, GroupMsg, Lang, Logger, Msg, MsgTypes }
