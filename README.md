@@ -29,7 +29,7 @@
 
 ### `1 -` 🛠️ Install runtimes and tools:
 
-- [NodeJS 💩](https://nodejs.org/pt-br/) (For WALL-E/Runner/Reminder)
+- [NodeJS 💩](https://nodejs.org/pt-br/) (For WALL-E)
 
 > 🪧 » _Recommended version: 22 or higher_
 
@@ -37,8 +37,8 @@
 
 - [PostgreSQL 🐘](https://www.postgresql.org/download/) (For database)
 
-> 🪧 » _Recommended version: 16 or higher_ Database is required to use some cmds like rank/remind or
-> to permanently save users prefix/language. but you can run it without a database.
+> 🪧 » _Recommended version: 16 or higher_
+> Some cmds may require a database to work (e.g. rank/remind) or to set language/prefix permanently. but WALL-E works ok with no db.
 
 - FFMPEG (For gif stickers)
 
@@ -73,7 +73,7 @@
 
 # or
 # Clone this repo
-git clone https://github.com/Sunf3r/WALL-E # You need to have git installed to do this
+git clone https://github.com/Sunf3r/WALL-E # You need to have git installed to run this cmd
 ```
 
 ### `3 -` 🌿 Preparing the environment:
@@ -113,8 +113,8 @@ You can configure the bot however you want in the following files:
 
 - `.env` (`settings/.env.example`)
 
-> 💡 » _Open the file to set sensitive keys and rename "`.env.example`" to "`.env`"_ if you have a
-> database, remove the # before DATABASE_URL and set it
+> 💡 » _Set sensitive keys and rename "`.env.example`" to "`.env`"_.
+> if you have a database, remove the # before DATABASE_URL and fill the URL.
 
 ### `3 -` 🧰 Installing dependencies and starting 🚀:
 
@@ -124,19 +124,19 @@ You can configure the bot however you want in the following files:
 cd WALL-E
 
 # This script will do everything to prepare the bot for
-# *the first time, but you need to do steps 1~3 first*
+# **the first time**, *but you need to do steps 1~3 first*
 npm run setup
 # It will: install tsc/pm2/prisma as global modules,
 # install node modules,
 # generate prisma schema, build source,
 # create python virtual environment,
 # install python dependencies,
-# and >start services< with pm2
+# and >start walle< with pm2
 
-# if you have a database, this one will also push db schema
+# if you have a database, run this one after setup. it will also push db schema 
 npm run setup:full
 
-# To stop all services:
+# To stop WALL-E:
 npm run stop
 
 # To start it again:
@@ -149,7 +149,7 @@ npm start
 
 ## Just scan the QR Code that will appear on terminal and then it's ready!
 
-> ⚠️ » All logs and QR codes will appear on `settings/logs/walle.log`.
+> ⚠️ » All logs and QR codes will appear on `settings/logs/output.txt`.
 
 # `-1.` 🗒️ Important Notes:
 
@@ -164,7 +164,7 @@ npm run update
 # It will: pull commits from repository,
 # update node modules, update deno and bun,
 # update python dependencies, generate prisma schema,
-# and rebuild source
+# and rebuild source.
 # update won't start services.
 
 # Starting services
