@@ -173,6 +173,7 @@ export default () => {
 
 		const stack = String(error?.stack || error)
 		printError(fmtLog(title, stack, 'red')) // error stack goes to error file
+		return
 	}
 
 	/** Print = Console.log

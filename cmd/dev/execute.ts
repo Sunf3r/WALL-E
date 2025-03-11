@@ -21,8 +21,7 @@ export default class extends Cmd {
 		const duration = (Date.now() - startTime).duration(true)
 		const RAM = process.memoryUsage().rss.bytes() // current RAM usage
 
-		const text = `\`$ ZSH (${RAM} | ${duration})\`\n` +
-			output.trim().encode()
+		const text = `\`$ ${duration}/${RAM}\`\n` + output
 
 		bot.send(msg, text)
 		bot.react(msg, 'ok')

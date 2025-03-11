@@ -22,6 +22,7 @@ import type {
 	GroupMsg,
 	Lang,
 	Logger,
+	MediaMsg,
 	Msg,
 	MsgTypes,
 } from './settings/types/types.js'
@@ -38,6 +39,7 @@ export {
 	isVisualNonSticker,
 	Lang,
 	Logger,
+	MediaMsg,
 	mediaTypes,
 	Msg,
 	MsgTypes,
@@ -63,14 +65,7 @@ import Cmd from './class/cmd.js'
 export { Baileys, Cmd, Collection, Group, prisma, User }
 
 // Functions
-import {
-	checkPermissions,
-	getCtx,
-	getMsgText,
-	getMsgType,
-	getQuoted,
-	msgMeta,
-} from './util/message.js'
+import { checkPermissions, getCtx, msgMeta } from './util/message.js'
 import {
 	cacheAllGroups,
 	cleanTemp,
@@ -100,9 +95,6 @@ export {
 	genRandomName,
 	genStickerMeta,
 	getCtx,
-	getMsgText,
-	getMsgType,
-	getQuoted,
 	isEmpty,
 	isValidPositiveIntenger,
 	languages,
