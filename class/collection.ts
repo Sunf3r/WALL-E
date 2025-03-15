@@ -11,7 +11,7 @@ export default class Collection<K, V> extends Map {
 	}
 
 	// Add: adds a value to the collection
-	async add(key: K, value?: V | object, extra: any[] = []): Promise<V> {
+	add(key: K, value?: V | object): V {
 		if (!key) throw new Error('Missing object key')
 
 		if (!value) {
@@ -51,11 +51,11 @@ export default class Collection<K, V> extends Map {
 	}
 
 	// Update: updates a item in the collection
-	async update(key: K, value: V, extra?: any[]): Promise<V> {
+	update(key: K, value: V): V {
 		if (!key) throw new Error('Missing object key')
 
 		const item = this.get(key)
-		if (!item) return await this.add(key, value, extra)
+		if (!item) return this.add(key, value)
 
 		value = Object.assign(item, value)
 		this.set(key, value)

@@ -1,13 +1,6 @@
 {
-	// DENO settings
-	"deno.enable": false,
-	"deno.unstable": true,
-	"deno.config": "settings/deno.jsonc",
-
-	// Editor settings
-	"editor.formatOnSave": true,
-
-	// Language settings
-	"typescript.format.semicolons": "remove",
-	"typescript.preferences.quoteStyle": "single"
+	"deno.enable": true,
+	"deno.lint": true,
+	"deno.config": "conf/deno.jsonc",
+	"deno.unstable": ["byonm"]
 }

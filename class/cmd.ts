@@ -1,4 +1,4 @@
-import type { CmdCtx } from '../map.js'
+import type { CmdCtx } from 'types'
 
 export default abstract class Cmd {
 	name: str
@@ -6,8 +6,8 @@ export default abstract class Cmd {
 	subCmds: str[]
 	cooldown: num
 	access: Partial<{
-		dm: bool // cmd can run on DM
-		groups: bool // cmd can run on groups
+		dm: bool // only works on DM
+		groups: bool // only works on groups
 		admin: bool // only admins can run the cmd
 		restrict: bool // only devs can run the cmd
 		needsDb: bool // cmd requires database to run.
@@ -19,16 +19,16 @@ export default abstract class Cmd {
 		this.cooldown = c.cooldown === 0 ? 0 : c.cooldown || 3 // Ignore some cmds cooldown
 		this.subCmds = c.subCmds || []
 		this.access = Object.assign({
-			dm: true,
-			groups: true,
-			admin: false,
-			restrict: false,
-			needsDb: false,
+			dm: true, // only works on DM
+			groups: true, // only works on groups
+			admin: false, // only admins can run the cmd
+			restrict: false, // only devs can run the cmd
+			needsDb: false, // requires database to run.
 		}, c.access) // Compare command permissions
 		// with this default setting
 	}
 
-	abstract run(ctx: CmdCtx): Promise<any> // run function
+	abstract run(ctx: CmdCtx): Promise<void> // run function
 
 	async checkData() {}
 }

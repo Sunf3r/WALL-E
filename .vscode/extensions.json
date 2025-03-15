@@ -1,6 +1,8 @@
 {
 	"recommendations": [
 		"denoland.vscode-deno",
-		"prisma.prisma"
+		"qwtel.sqlite-viewer",
+		"pkief.material-icon-theme",
+		"pabitrabanerjee.idx-dark-theme"
 	]
 }

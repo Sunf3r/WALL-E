@@ -1,17 +1,4 @@
-# Settings
-**/auth*
-cache/
-*.env
-test/
-settings/venv/*
-cookies.txt
-
-# Builds
-build/
-node_modules/
-
-# Logs / Lock
-log
-temp
-*lock*
-*.lock*
+node_modules
+session*
+*.db
+*.lock
