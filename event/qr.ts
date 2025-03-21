@@ -1,7 +1,7 @@
 import qrcode from 'qr'
 
-// When the client received QR-Code
+// When the client receive the login QR-Code
 export default function (qr: str) {
-	console.log('QR RECEIVED', qr)
+	console.log('LOGIN', 'QR-Code received', 'green')
 	qrcode.generate(qr, { small: true })
 }

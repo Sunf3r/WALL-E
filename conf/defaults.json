@@ -1,0 +1,11 @@
+{
+	"lang": "pt",
+	"prefix": ".",
+	"timezone": "America/Sao_Paulo",
+	"cache": {
+		"users": 200,
+		"groups": 200,
+		"dmMsgs": 10,
+		"groupMsgs": 200
+	}
+}

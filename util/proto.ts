@@ -1,19 +1,20 @@
 import humanizeDuration, { Unit } from 'humanize-duration'
+import defaults from 'defaults' with { type: 'json' }
 import { DateTime } from 'luxon'
 
 export { now }
 export default function () {
-	strPrototypes()
-	numPrototypes()
+	strPrototypes() // create string prototypes
+	numPrototypes() // create number prototypes
 
-	console.log = print
+	console.log = print // set custom console.log
 }
 
 // get 'now' date time formatted
 function now(format = 'TT') {
 	return DateTime.now()
-		.setZone('America/Sao_paulo')
-		.setLocale('pt')
+		.setZone(defaults.timezone)
+		.setLocale(defaults.lang)
 		.toFormat(format) // TT = HOURS:MINITES:SECONDS
 }
 
@@ -89,6 +90,6 @@ function print(...args: any) {
 
 	console.info(
 		`%c[ ${now('TT.SSS')} |${memory}|${title.align(9)}] - ${msg}`,
-		`color: ${color}Bright`,
+		`color: ${color}`,
 	)
 }

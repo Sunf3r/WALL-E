@@ -10,7 +10,6 @@ export default abstract class Cmd {
 		groups: bool // only works on groups
 		admin: bool // only admins can run the cmd
 		restrict: bool // only devs can run the cmd
-		needsDb: bool // cmd requires database to run.
 	}>
 
 	constructor(c: Partial<Cmd>) {
@@ -23,12 +22,9 @@ export default abstract class Cmd {
 			groups: true, // only works on groups
 			admin: false, // only admins can run the cmd
 			restrict: false, // only devs can run the cmd
-			needsDb: false, // requires database to run.
 		}, c.access) // Compare command permissions
 		// with this default setting
 	}
 
 	abstract run(ctx: CmdCtx): Promise<void> // run function
-
-	async checkData() {}
 }

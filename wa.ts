@@ -5,12 +5,12 @@ import proto from './util/proto.ts'
 proto() // load prototypes
 const bot = new Client({
 	authStrategy: new LocalAuth({ dataPath: 'conf', clientId: 'walle' }),
-	// auth path = conf/session/
+	// auth path = conf/session-walle
 	puppeteer: { args: ['--no-sandbox', '--disable-setuid-sandbox'] },
 })
 
-const cwd = Deno.cwd()
+const cwd = Deno.cwd() // current working directory
 folderHandler(cwd + '/event', loadEvent, bot) // load all events
 folderHandler(cwd + '/cmd', loadCmd, bot) // load all commands
 
-// bot.initialize()
+bot.initialize()
