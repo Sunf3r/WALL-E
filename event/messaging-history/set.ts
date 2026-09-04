@@ -1,3 +1,4 @@
+// Sync event: logs history-sync progress (contacts/chats backfill is intentionally a no-op).
 import type { Chat, Contact, WAMessage } from 'baileys'
 
 interface Event {

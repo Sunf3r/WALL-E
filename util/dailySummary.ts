@@ -11,7 +11,6 @@ export interface DailySummaryInput {
 	menu: ParsedMenuResult | null
 	calendar: ClassifiedCalendar | null
 	bulletinTitle?: string
-	campusName?: string
 }
 
 export async function generateDailySummary(

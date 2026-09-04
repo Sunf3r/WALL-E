@@ -22,7 +22,7 @@ if (connectionString) {
 
 export const db = dbClient
 
-export async function createUser({ lid, name }: { lid: str; name?: str }): Promise<User> {
+async function createUser({ lid, name }: { lid: str; name?: str }): Promise<User> {
 	let id = Number(lid.parsePhone()) || Date.now()
 	if (Deno.env.get('DATABASE_URL')) {
 		const data = await db?.insert(schema.users)
