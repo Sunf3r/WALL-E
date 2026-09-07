@@ -53,12 +53,6 @@ interface CmdCtx {
 	t: TFunction<'translation', undefined>
 }
 
-interface GroupMsg {
-	author: num
-	group: str
-	count: num
-}
-
 type GoogleFile = {
 	buffer: Buffer<ArrayBufferLike> | ArrayBuffer
 	mime: str
@@ -71,4 +65,4 @@ type Gparams = {
 	file?: GoogleFile
 }
 
-export type { CmdCtx, GoogleFile, Gparams, GroupMsg, Msg, MsgTypes }
+export type { CmdCtx, GoogleFile, Gparams, Msg, MsgTypes }
