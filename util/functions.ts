@@ -3,7 +3,6 @@ const delay = async (time: num) => await new Promise((r) => setTimeout(() => r(t
 
 const randomDelay = (min = 2_000, max = 5_000) =>
 	delay(min + Math.floor(Math.random() * (max - min)))
-const randomTime = (min = 1_000, max = 3_000) => min + Math.floor(Math.random() * (max - min))
 
 // isValidPositiveIntenger: validate a number
 const isValidPositiveIntenger = (num: num) => !Number.isNaN(num) && num > 0 && Number.isInteger(num)
@@ -36,24 +35,4 @@ function findKey(obj: any, key: str): any {
 	return
 }
 
-// Validate whether a variable actually has a useful value
-function isEmpty(value: unknown): bool {
-	// check if a array/obj is empty
-	if (!value) return true
-
-	if (Array.isArray(value)) {
-		return (
-			value.length === 0 ||
-			value.some((item) => item === undefined || isEmpty(item))
-		)
-	} else if (typeof value === 'object') {
-		return (
-			Object.keys(value!).length === 0 ||
-			Object.values(value!).every((item) => item === undefined || item === null)
-		)
-	}
-
-	return false
-}
-
-export { delay, findKey, isEmpty, isValidPositiveIntenger, randomDelay, randomTime }
+export { delay, findKey, isValidPositiveIntenger, randomDelay }
