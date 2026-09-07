@@ -70,6 +70,8 @@ deno task start:dev   # or: pm2 start conf/ecosystem.config.cjs --attach
   windows (TG 48h, WA ~15 min) edits can't apply.
 - Formatting (bold/italic/strike/code) converts both ways; underline/spoiler and named links degrade
   gracefully.
+- WhatsApp @mentions cross as `@name (+phone)` (Telegram can't resolve WA identities; LID and
+  non-phone JIDs pass through unannotated). Applies to new messages and WA-side edits.
 - Reactions are last-writer-wins per message (single bot identity on each side); common WhatsApp
   reactions missing on Telegram (😂→🤣, …) are mapped, anything Telegram rejects (REACTION_INVALID)
   is skipped with a one-time warn; custom-emoji and paid TG reactions fall back to ❤️ on WhatsApp.

@@ -7,7 +7,7 @@
 //
 // Call `attachWaRelay()` AFTER `loadEvents()` in wa.ts — loadEvents() calls
 // removeAllListeners() per event, so attaching earlier would wipe our hook.
-import { downloadMediaMessage, type proto } from 'baileys'
+import { downloadMediaMessage, type proto, WAMessageStubType } from 'baileys'
 import { Bot, InputFile } from 'grammy'
 import { findKey } from '@util/functions.ts'
 import { logger } from '@util/proto.ts'
@@ -68,9 +68,10 @@ export function attachWaRelay(tgBot: Bot, bridgeDb: BridgeDB, rateLimiter: RateL
 			console.error('[BRIDGE] WA→TG group event failed:', e)
 		}
 	})
-	// Deletes/revokes → delete the Telegram mirror (WA→TG only; the Bot API
-	// emits no event when a Telegram message is deleted, so TG→WA delete
-	// sync is impossible — see README).
+	// Local "delete for me" syncs → delete the Telegram mirror too.
+	// "Delete for everyone" revokes arrive as `messages.update` (REVOKE stub)
+	// and are handled in handleWaEdits; the Bot API emits no event when a
+	// Telegram message is deleted, so TG→WA delete sync is impossible.
 	bot.sock.ev.on('messages.delete', async (payload: any) => {
 		try {
 			await handleWaDeletes(payload)
@@ -141,7 +142,7 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 			// the catch-block notify, but everything below needs a number.
 			const tid: number = topicId
 
-			let text = getMsgText(m.message)
+			let text = annotateMentions(getMsgText(m.message), getMentionedJids(m))
 			const media = await downloadWaMedia(m)
 			let special = getSpecialContent(m.message)
 			// Content Telegram can't represent natively degrades to text
@@ -554,26 +555,35 @@ async function handleWaDeletes(
 			const id = key?.id
 			const jid = key?.remoteJid
 			if (!id || !jid || jid === 'status@broadcast') continue
-			const mapping = db.getByJid(jid)
-			if (!mapping || mapping.archived || mapping.muted) continue
-			const target = db.getByWaMsgId(id, jid)
-			if (!target) {
-				console.debug(`[BRIDGE] skipping WA delete: target ${id} not in reply_map`)
-				continue
-			}
-			await limiter.enqueue(async () => {
-				try {
-					await tg!.api.deleteMessage(supergroupId, target.tg_msg_id)
-					db!.deleteReplyMap(target.tg_msg_id)
-					console.debug(`[BRIDGE] WA→TG delete of TG msg ${target.tg_msg_id}`)
-				} catch (e) {
-					logDeleteFailure(target.tg_msg_id, e)
-				}
-			})
+			await deleteTgMirror(jid, id)
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA delete:', e)
 		}
 	}
+}
+
+// Delete the Telegram mirror of a revoked/deleted WA message. Shared by the
+// `messages.delete` path (delete-for-me syncs) and the REVOKE branch of
+// `messages.update` (delete-for-everyone). Drops the reply_map row on
+// success so later edits/reactions to the deleted message don't 400.
+async function deleteTgMirror(jid: string, id: string): Promise<void> {
+	if (!db || !limiter || !tg) return
+	const mapping = db.getByJid(jid)
+	if (!mapping || mapping.archived || mapping.muted) return
+	const target = db.getByWaMsgId(id, jid)
+	if (!target) {
+		console.debug(`[BRIDGE] skipping WA delete: target ${id} not in reply_map`)
+		return
+	}
+	await limiter.enqueue(async () => {
+		try {
+			await tg!.api.deleteMessage(supergroupId, target.tg_msg_id)
+			db!.deleteReplyMap(target.tg_msg_id)
+			console.debug(`[BRIDGE] WA→TG delete of TG msg ${target.tg_msg_id}`)
+		} catch (e) {
+			logDeleteFailure(target.tg_msg_id, e)
+		}
+	})
 }
 
 function logDeleteFailure(tgMsgId: number, err: unknown): void {
@@ -904,22 +914,41 @@ export function getSpecialContent(message: proto.IMessage | undefined | null): W
 }
 
 // WhatsApp message edit → Telegram edit. Edits arrive as `messages.update`
-// with `update.message.editedMessage.message` (never as upsert). The mirror
-// message is always bot-owned, so Telegram's 48h edit window is the only
-// platform limit — but mirrors of stickers/polls/venues/contacts can't be
-// edited at all, and rows predating tg_kind fall back to try-both.
+// with `update.message.editedMessage.message` (never as upsert). "Delete for
+// everyone" revokes arrive on the SAME event with `update.message === null`
+// and `messageStubType === REVOKE` — Baileys only emits `messages.delete`
+// for local "delete for me" syncs, so revokes are handled here too. The
+// mirror message is always bot-owned, so Telegram's 48h edit window is the
+// only platform limit — but mirrors of stickers/polls/venues/contacts can't
+// be edited at all, and rows predating tg_kind fall back to try-both.
 async function handleWaEdits(
-	updates: { key: proto.IMessageKey; update: { message?: any } }[],
+	updates: { key: proto.IMessageKey; update: { message?: any; messageStubType?: number } }[],
 ): Promise<void> {
 	if (!db || !limiter || !tg) return
 
 	for (const { key, update } of updates) {
 		try {
+			// Revoke ("delete for everyone") — same event, null message.
+			if (update?.message == null && update?.messageStubType === WAMessageStubType.REVOKE) {
+				const jid = key?.remoteJid
+				const id = key?.id
+				if (!jid || !id || jid === 'status@broadcast') continue
+				// A TG-initiated edit mark is irrelevant here, but consuming
+				// it keeps the guard set from growing stale.
+				db.takeTgEdit(jid, id)
+				await deleteTgMirror(jid, id)
+				continue
+			}
 			const edited = update?.message?.editedMessage?.message
+			// Anything else (receipts, status, poll votes, …) is not an edit —
+			// skip silently, these fire constantly.
 			if (!edited || typeof edited !== 'object') continue
 			const jid = key?.remoteJid
 			const id = key?.id
-			if (!jid || !id || jid === 'status@broadcast') continue
+			if (!jid || !id || jid === 'status@broadcast') {
+				console.debug('[BRIDGE] skipping WA edit: missing jid/id')
+				continue
+			}
 			// Echo of our own TG→WA edit (marked before the WA send) — the
 			// TG message already shows this text; editing would 400.
 			if (db.takeTgEdit(jid, id)) {
@@ -927,9 +956,15 @@ async function handleWaEdits(
 				continue
 			}
 			const mapping = db.getByJid(jid)
-			if (!mapping || mapping.archived || mapping.muted) continue
+			if (!mapping || mapping.archived || mapping.muted) {
+				console.debug(`[BRIDGE] skipping WA edit ${id}: chat unmapped/archived/muted`)
+				continue
+			}
 			const target = db.getByWaMsgId(id, jid)
-			if (!target) continue
+			if (!target) {
+				console.debug(`[BRIDGE] skipping WA edit: target ${id} not in reply_map`)
+				continue
+			}
 
 			const route = routeEdit((target as { tg_kind?: string }).tg_kind)
 			if (route === 'skip') {
@@ -943,7 +978,12 @@ async function handleWaEdits(
 			const label = key.fromMe
 				? 'You: '
 				: (isGroup ? `${phoneOf(key.participant) || 'unknown'}: ` : '')
-			const parsed = waMarkdownToTgEntities(getMsgText(edited as proto.IMessage))
+			const parsed = waMarkdownToTgEntities(
+				annotateMentions(
+					getMsgText(edited as proto.IMessage),
+					mentionedJidsOf(edited),
+				),
+			)
 			const body = `${label}${parsed.text}`
 			const entities = parsed.entities.map((e) => ({ ...e, offset: e.offset + label.length }))
 			const rich = entities.length > 0 ? { entities } : undefined
@@ -1121,6 +1161,65 @@ function getMsgText(message: proto.IMessage): string {
 		if (res) return String(res).trim()
 	}
 	return ''
+}
+
+// Phone (`+<digits>`) for a mentionable WhatsApp JID, or null for anything
+// that isn't a plain phone JID (LIDs, groups, broadcasts, short/invalid).
+export function jidPhone(jid: string | undefined | null): string | null {
+	if (!jid || typeof jid !== 'string') return null
+	const [user, server] = jid.split('@')
+	if (server !== 's.whatsapp.net' && server !== 'c.us') return null
+	const digits = (user || '').split(':')[0].replace(/\D/g, '')
+	if (!/^\d{7,15}$/.test(digits)) return null
+	return `+${digits}`
+}
+
+// Mentioned JIDs (contextInfo.mentionedJid) off an unwrapped content node.
+// Same direct top-level scan as getQuoteInfo — never a deep search.
+function mentionedJidsOf(raw: any): string[] {
+	try {
+		if (!raw || typeof raw !== 'object') return []
+		for (const value of Object.values(raw)) {
+			if (value && typeof value === 'object') {
+				const list = (value as any).contextInfo?.mentionedJid
+				if (Array.isArray(list)) return list.filter((j) => typeof j === 'string')
+			}
+		}
+	} catch {
+		// fall through
+	}
+	return []
+}
+
+// Mentioned JIDs of an incoming WhatsApp message.
+export function getMentionedJids(m: proto.IWebMessageInfo): string[] {
+	try {
+		return mentionedJidsOf(unwrap(m.message))
+	} catch {
+		return []
+	}
+}
+
+// Annotate `@name` mentions with the member's phone number: WhatsApp shows
+// the contact name but Telegram can't resolve the identity, so
+// "hi @John" + mentionedJid 1555@s.whatsapp.net becomes
+// "hi @John (+1555…)". Pairs @tokens in order with the JID list (which is
+// how WhatsApp orders them); tokens already containing the number and
+// unresolvable JIDs pass through untouched. Runs BEFORE entity parsing so
+// formatting offsets stay consistent.
+export function annotateMentions(text: string, mentionedJids: string[]): string {
+	if (!text || mentionedJids.length === 0) return text
+	const phones = mentionedJids.map(jidPhone)
+	let i = 0
+	// Trailing punctuation (,@John, …) stays outside the token so the phone
+	// lands next to the name: "@John, hi" → "@John (+…), hi".
+	return text.replace(/@[^@\s.,;:!?)]+/g, (tok) => {
+		if (i >= phones.length) return tok
+		const phone = phones[i++]
+		if (!phone) return tok
+		if (tok.replace(/\D/g, '').endsWith(phone.slice(-7))) return tok
+		return `${tok} (${phone})`
+	})
 }
 
 interface WaQuote {
