@@ -101,7 +101,7 @@ function loadEnv() {
 // 1. Setup options
 function runLightSetup() {
 	console.log('\n--- Running Light Setup ---')
-	console.log('Installing global tools (prisma, pm2) with scripts allowed...')
+	console.log('Installing global tools (drizzle-kit, pm2) with scripts allowed...')
 	runCmd('deno', ['task', 'presetup'])
 
 	console.log('Installing project dependencies...')
@@ -111,7 +111,7 @@ function runLightSetup() {
 		return false
 	}
 
-	console.log('Generating Prisma Client...')
+	console.log('Generating Drizzle schema...')
 	runCmd('deno', ['task', 'db:gen'])
 	console.log('Light Setup completed.')
 	return true
@@ -315,7 +315,7 @@ function runUpdate() {
 		return
 	}
 
-	console.log('Re-generating Prisma Client...')
+	console.log('Re-generating Drizzle schema...')
 	runCmd('deno', ['task', 'db:gen'])
 
 	// Update Python dependencies if virtualenv exists
@@ -497,7 +497,7 @@ async function main() {
 				console.log(
 					'  2. Medium: Light setup + Python dependencies (Background removal & Video download)',
 				)
-				console.log('  3. Strong: Medium setup + Database migration (Prisma push)')
+				console.log('  3. Strong: Medium setup + Database migration (Drizzle push)')
 				console.log('  4. Re-configure Environment (.env and defaults.json)')
 				console.log('  5. Back')
 				const setupChoice = prompt('\nChoose setup level [1-5]: ')
