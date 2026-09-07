@@ -766,7 +766,14 @@ async function downloadTgFile(tg: Bot, fileId: string): Promise<Uint8Array | 'to
 		if (!file.file_path) return null
 		const res = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`)
 		if (!res.ok) return null
-		return new Uint8Array(await res.arrayBuffer())
+		const declared = Number(res.headers.get('content-length'))
+		if (Number.isFinite(declared) && declared > TG_DOWNLOAD_CAP_BYTES) {
+			await res.body?.cancel().catch(() => {})
+			return 'too-large'
+		}
+		const buf = new Uint8Array(await res.arrayBuffer())
+		if (buf.length > TG_DOWNLOAD_CAP_BYTES) return 'too-large'
+		return buf
 	} catch (e) {
 		// Second layer behind the file_size pre-check (size can be absent
 		// on some nodes): getFile itself refuses >20 MB files.
