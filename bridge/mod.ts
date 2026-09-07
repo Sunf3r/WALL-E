@@ -56,12 +56,26 @@ export function startBridge(): Bot | null {
 
 	const db = new BridgeDB('conf/gen/bridge.db')
 	db.init()
-	const limiter = new RateLimiter(Number(Deno.env.get('RATE_LIMIT_MS') || 1000))
+	// Telegram and WhatsApp have independent budgets, so they get independent
+	// queues. All forum topics share ONE supergroup, whose flood control is
+	// stricter than 1 msg/s (~20/min per group + burst penalties with
+	// retry_after up to tens of seconds), hence the conservative 3s default.
+	// TELEGRAM_RATE_LIMIT_MS overrides the legacy RATE_LIMIT_MS name.
+	const tgLimiter = new RateLimiter(
+		envNum('TELEGRAM_RATE_LIMIT_MS', envNum('RATE_LIMIT_MS', 3000)),
+		{
+			maxRetries: envNum('RATE_LIMIT_MAX_RETRIES', 5),
+			maxWaitMs: envNum('RATE_LIMIT_MAX_WAIT_MS', 120_000),
+		},
+	)
+	// WhatsApp sends don't consume Telegram budget — light spacing only, so a
+	// Telegram flood never stalls the TG→WA direction (and vice versa).
+	const waLimiter = new RateLimiter(envNum('WHATSAPP_RATE_LIMIT_MS', 500))
 
 	const tg = new Bot(token)
-	registerTgHandlers(tg, db, limiter)
+	registerTgHandlers(tg, db, tgLimiter, waLimiter)
 	// The WA socket is already connected by wa.ts at this point.
-	attachWaRelay(tg, db, limiter)
+	attachWaRelay(tg, db, tgLimiter)
 
 	tg.catch((e) => console.error('[BRIDGE] Telegram handler error:', e))
 	// Fire-and-forget: bot.start() long-polls until stopped; never await it
@@ -79,6 +93,15 @@ export function startBridge(): Bot | null {
 
 	console.log('[BRIDGE] running: WhatsApp <-> Telegram topic mirror active')
 	return tg
+}
+
+// Parse a numeric env var with a safe fallback (unset, empty, NaN and
+// negatives all fall back — a 0/negative spacing would defeat the queue).
+function envNum(name: string, fallback: number): number {
+	const raw = Deno.env.get(name)
+	if (raw == null || raw.trim() === '') return fallback
+	const n = Number(raw)
+	return Number.isFinite(n) && n >= 0 ? n : fallback
 }
 
 // Non-blocking sanity check: reacting on Telegram only reaches the bridge
