@@ -36,7 +36,9 @@
 			"es",
 			"de"
 		],
-		"changed": "[🌎] - Idioma alterado para {{lng}}"
+		"changed": "[🌎] - Idioma alterado para {{lng}}",
+		"ask": "[🌎] - Qual idioma você prefere? Atual: *{{current}}*\n{{list}}\nResponda com *{{prefix}}lang <número ou código>*",
+		"invalid": "[❗] - \"{{input}}\" não é um idioma válido. Atual: *{{current}}*\n{{list}}\nResponda com *{{prefix}}lang <número ou código>*"
 	},
 	"prefix": {
 		"usage": "<prefixo com até 3 dígitos>",
