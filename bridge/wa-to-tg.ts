@@ -143,7 +143,8 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 			const tid: number = topicId
 
 			let text = annotateMentions(getMsgText(m.message), getMentionedJids(m))
-			const media = await downloadWaMedia(m)
+			const dl = await downloadWaMedia(m)
+			const media = dl?.media ?? null
 			let special = getSpecialContent(m.message)
 			// Content Telegram can't represent natively degrades to text
 			// BEFORE entity parsing, so formatting offsets stay consistent.
@@ -159,11 +160,12 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 
 			if (!text && !media && !special) {
 				// A media node whose download failed would otherwise vanish
-				// silently — tell the topic instead of dropping it.
-				if (hasDownloadableMedia(m) && topicId !== null) {
+				// silently — tell the topic what exactly didn't cross, with
+				// its kind and size when the node advertised them.
+				if (dl && topicId !== null) {
 					await notifyTopic(
 						topicId,
-						`⚠️ Couldn't download a WhatsApp attachment — it didn't cross.`,
+						waDownloadFailureLine(dl.label, dl.bytes),
 					)
 				}
 				continue
@@ -384,7 +386,10 @@ async function flushAlbum(key: string): Promise<void> {
 				}
 			} catch (e) {
 				console.error('[BRIDGE] failed to relay album group:', e)
-				await notifyTopic(first.topicId, `⚠️ Couldn't relay a photo group: ${shortErr(e)}`)
+				await notifyTopic(
+					first.topicId,
+					`⚠️ Couldn't relay a photo group (${chunk.length} photos): ${shortErr(e)}`,
+				)
 			}
 		})
 	}
@@ -443,25 +448,6 @@ function shortErr(e: unknown): string {
 			(e as { message?: unknown })?.message ??
 			String(e))
 	return String(raw).split('\n')[0].slice(0, 160) || 'unknown error'
-}
-
-// True when the WA message carries a media node (so a null download means
-// failure, not "no media"). Mirrors downloadWaMedia's node detection.
-function hasDownloadableMedia(m: proto.IWebMessageInfo): boolean {
-	try {
-		const raw = unwrap(m.message)
-		if (!raw || typeof raw !== 'object') return false
-		return !!(
-			raw.imageMessage ||
-			raw.videoMessage ||
-			raw.ptvMessage ||
-			raw.audioMessage ||
-			raw.stickerMessage ||
-			raw.documentMessage
-		)
-	} catch {
-		return false
-	}
 }
 
 // WhatsApp reaction → Telegram reaction. Each side mirrors through a single
@@ -1414,37 +1400,107 @@ interface WaMedia {
 	ptt?: boolean
 }
 
-async function downloadWaMedia(m: proto.IWebMessageInfo): Promise<WaMedia | null> {
+// Result of attempting a WhatsApp attachment download. null = the message
+// carries no media node at all; otherwise media is set on success and null
+// on failure, with label/bytes describing what didn't cross (from the
+// node's fileLength, which Baileys exposes as number | Long | string).
+export interface WaDownload {
+	media: WaMedia | null
+	label: string
+	bytes: number | null
+}
+
+export function formatBytes(n: number): string {
+	const v = Math.max(0, Math.floor(n))
+	if (v < 1024) return `${v} B`
+	const units = ['KB', 'MB', 'GB'] as const
+	let size = v / 1024
+	let u = 0
+	while (size >= 1024 && u < units.length - 1) {
+		size /= 1024
+		u++
+	}
+	return `${size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[u]}`
+}
+
+// Normalize a Baileys fileLength (number | numeric string | Long-like
+// {low,high} | bigint) to bytes. Anything unparseable → null (the notice
+// just omits the size rather than printing garbage).
+export function waBytes(v: unknown): number | null {
+	try {
+		if (typeof v === 'number') {
+			return Number.isFinite(v) && v >= 0 ? Math.floor(v) : null
+		}
+		if (typeof v === 'string') {
+			const n = Number(v)
+			return v.trim() !== '' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : null
+		}
+		if (typeof v === 'bigint') {
+			return v >= 0 && v <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(v) : null
+		}
+		if (typeof v === 'object' && v !== null) {
+			const { low, high } = v as { low?: unknown; high?: unknown }
+			if (typeof low === 'number' && typeof high === 'number') {
+				const n = high * 2 ** 32 + (low >>> 0)
+				return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null
+			}
+		}
+	} catch {
+		// fall through to null
+	}
+	return null
+}
+
+// Topic notice for a failed WhatsApp download: names the attachment kind
+// (documents include the file name) and size when known. Article keys off
+// "WhatsApp" (consonant), not the label.
+export function waDownloadFailureLine(label: string, bytes: number | null): string {
+	const size = bytes != null ? ` (${formatBytes(bytes)})` : ''
+	return `⚠️ Couldn't download a WhatsApp ${label}${size} — it didn't cross.`
+}
+
+async function downloadWaMedia(m: proto.IWebMessageInfo): Promise<WaDownload | null> {
 	try {
 		const raw = unwrap(m.message)
 		if (!raw) return null
 
 		let kind: WaMedia['kind'] | null = null
+		let label = 'attachment'
 		let node: any = null
 		if (raw.imageMessage) {
 			kind = 'image'
+			label = 'image'
 			node = raw.imageMessage
 		} else if (raw.ptvMessage) {
 			// Round video-note messages arrive as ptvMessage, not videoMessage.
 			kind = 'round'
+			label = 'video note'
 			node = raw.ptvMessage
 		} else if (raw.videoMessage) {
 			// GIFs are videoMessages with the gifPlayback flag.
-			kind = raw.videoMessage.gifPlayback ? 'gif' : 'video'
+			const isGif = !!raw.videoMessage.gifPlayback
+			kind = isGif ? 'gif' : 'video'
+			label = isGif ? 'GIF' : 'video'
 			node = raw.videoMessage
 		} else if (raw.audioMessage) {
-			kind = raw.audioMessage.ptt ? 'voice' : 'audio'
+			const isVoice = !!raw.audioMessage.ptt
+			kind = isVoice ? 'voice' : 'audio'
+			label = isVoice ? 'voice message' : 'audio'
 			node = raw.audioMessage
 		} else if (raw.stickerMessage) {
 			kind = 'sticker'
+			label = 'sticker'
 			node = raw.stickerMessage
 		} else if (raw.documentMessage) {
 			kind = 'document'
+			label = documentLabel(raw.documentMessage)
 			node = raw.documentMessage
 		} else {
 			return null
 		}
-		if (!node?.url && !node?.directPath) return null
+		const bytes = waBytes(node?.fileLength)
+		const fail = (): WaDownload => ({ media: null, label, bytes })
+		if (!node?.url && !node?.directPath) return fail()
 
 		const buffer = await downloadMediaMessage(
 			m as any,
@@ -1452,18 +1508,26 @@ async function downloadWaMedia(m: proto.IWebMessageInfo): Promise<WaMedia | null
 			{},
 			{ reuploadRequest: bot.sock.updateMediaMessage, logger },
 		).catch(() => null) as Buffer | Uint8Array | null
-		if (!buffer) return null
+		if (!buffer) return fail()
 
 		return {
-			kind,
-			buffer: new Uint8Array(buffer),
-			mime: node.mimetype,
-			fileName: node.fileName,
-			ptt: node.ptt,
+			media: {
+				kind,
+				buffer: new Uint8Array(buffer),
+				mime: node.mimetype,
+				fileName: node.fileName,
+				ptt: node.ptt,
+			},
+			label,
+			bytes,
 		}
 	} catch {
 		return null
 	}
+}
+
+function documentLabel(node: any): string {
+	return node?.fileName ? `document "${node.fileName}"` : 'document'
 }
 
 // Peel view-once / ephemeral wrappers so media underneath is reachable.

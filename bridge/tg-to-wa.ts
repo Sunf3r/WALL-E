@@ -221,7 +221,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 		const quoted = buildQuoted(first.msg, mapping.whatsapp_jid, db)
 		let attached = false
 		let notified = false
-		for (const it of items) {
+		for (const [i, it] of items.entries()) {
 			try {
 				const waContent = await buildWaContent(it.text, it.media, it.msg)
 				if (!waContent) continue
@@ -251,7 +251,9 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 						tg,
 						limiter,
 						first.topicId,
-						`⚠️ Couldn't send part of a Telegram album: ${shortErr(e)}`,
+						`⚠️ Couldn't send part of a Telegram album (item ${
+							i + 1
+						} of ${items.length}): ${shortErr(e)}`,
 					)
 				}
 			}
@@ -279,21 +281,23 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			// formatting survives the crossing in both text and captions.
 			const rawText = msg.text || msg.caption || ''
 			const text = tgEntitiesToWa(rawText, msg.entities || msg.caption_entities).trim()
-			const media = await downloadTgMedia(tg, msg)
+			const dl = await downloadTgMedia(tg, msg)
+			const media = dl?.media ?? null
 			if (
 				!text && !media && !msg.location && !msg.contact && !msg.poll && !msg.video_note &&
 				!msg.animation
 			) {
 				return
 			}
-			// A media node whose download failed would otherwise vanish
-			// silently — tell the topic instead of dropping it.
-			if (!media && hasTgMediaNode(msg)) {
+			// A media node whose download failed (or was skipped as too large
+			// for the Bot API) would otherwise vanish silently — tell the
+			// topic what exactly didn't cross instead of dropping it.
+			if (dl && !dl.media) {
 				await notifyTopic(
 					tg,
 					limiter,
 					topicId,
-					`⚠️ Couldn't download a Telegram attachment — it didn't cross.`,
+					tgDownloadFailureLine(dl.label, dl.bytes, dl.tooLarge),
 				)
 				if (!text) return
 			}
@@ -585,16 +589,77 @@ interface TgMedia {
 	mime?: string
 }
 
-async function downloadTgMedia(tg: Bot, msg: any): Promise<TgMedia | null> {
+// Bot API getFile refuses files over 20 MB ("file is too big") —
+// pre-check file_size so doomed downloads fail fast with a specific
+// notice instead of a generic one after a wasted attempt.
+export const TG_DOWNLOAD_CAP_BYTES = 20_000_000
+
+// Result of attempting a Telegram attachment download. null = the message
+// carries no attachment node at all; otherwise media is set on success and
+// null on failure, with label/bytes describing what didn't cross and
+// tooLarge marking cap pre-check (or getFile "too big") skips.
+export interface TgDownload {
+	media: TgMedia | null
+	label: string
+	bytes: number | null
+	tooLarge: boolean
+}
+
+export function formatBytes(n: number): string {
+	const v = Math.max(0, Math.floor(n))
+	if (v < 1024) return `${v} B`
+	const units = ['KB', 'MB', 'GB'] as const
+	let size = v / 1024
+	let u = 0
+	while (size >= 1024 && u < units.length - 1) {
+		size /= 1024
+		u++
+	}
+	return `${size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[u]}`
+}
+
+function tgBytes(v: unknown): number | null {
+	if (typeof v !== 'object' || v === null) {
+		return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null
+	}
+	return null
+}
+
+function sizeSuffix(bytes: number | null): string {
+	return bytes != null ? ` (${formatBytes(bytes)})` : ''
+}
+
+// Topic notice for a failed Telegram download. tooLarge names the 20 MB
+// cap and the fix (send it smaller / as a link); other failures name the
+// attachment kind and size when known.
+export function tgDownloadFailureLine(
+	label: string,
+	bytes: number | null,
+	tooLarge: boolean,
+): string {
+	// Article keys off "Telegram" (consonant), not the label.
+	if (tooLarge) {
+		return `⚠️ A Telegram ${label}${
+			sizeSuffix(bytes)
+		} exceeds the 20 MB bot download limit — it didn't cross.`
+	}
+	return `⚠️ Couldn't download a Telegram ${label}${sizeSuffix(bytes)} — it didn't cross.`
+}
+
+async function downloadTgMedia(tg: Bot, msg: any): Promise<TgDownload | null> {
 	try {
 		let fileId: string | null = null
 		let kind: TgMedia['kind'] = 'document'
+		let label = 'attachment'
+		let bytes: number | null = null
 		let fileName: string | undefined
 		let mime: string | undefined
 
 		if (msg.sticker) {
 			fileId = fileIdOf(msg.sticker)
 			kind = 'sticker'
+			label = 'sticker'
+			bytes = tgBytes(msg.sticker.file_size)
 			// WhatsApp only accepts WebP stickers. Flag video (.webm) and
 			// animated (.tgs) ones here so buildWaContent() can relay them
 			// as video/document instead.
@@ -609,41 +674,59 @@ async function downloadTgMedia(tg: Bot, msg: any): Promise<TgMedia | null> {
 				mime = 'image/webp'
 			}
 		} else if (msg.photo?.length) {
-			fileId = fileIdOf(msg.photo[msg.photo.length - 1])
+			const best = msg.photo[msg.photo.length - 1]
+			fileId = fileIdOf(best)
 			kind = 'image'
+			label = 'image'
+			bytes = tgBytes(best.file_size)
 		} else if (msg.video) {
 			fileId = fileIdOf(msg.video)
 			kind = 'video'
+			label = 'video'
+			bytes = tgBytes(msg.video.file_size)
 			fileName = msg.video.file_name
 			mime = msg.video.mime_type
 		} else if (msg.video_note) {
 			fileId = fileIdOf(msg.video_note)
 			kind = 'video_note'
+			label = 'video note'
+			bytes = tgBytes(msg.video_note.file_size)
 		} else if (msg.animation) {
 			fileId = fileIdOf(msg.animation)
 			kind = 'gif'
+			label = 'GIF'
+			bytes = tgBytes(msg.animation.file_size)
 			fileName = msg.animation.file_name
 			mime = msg.animation.mime_type
 		} else if (msg.voice) {
 			fileId = fileIdOf(msg.voice)
 			kind = 'voice'
+			label = 'voice message'
+			bytes = tgBytes(msg.voice.file_size)
 		} else if (msg.audio) {
 			fileId = fileIdOf(msg.audio)
 			kind = 'audio'
+			label = 'audio'
+			bytes = tgBytes(msg.audio.file_size)
 			mime = msg.audio.mime_type
 		} else if (msg.document) {
 			fileId = fileIdOf(msg.document)
 			kind = 'document'
+			label = msg.document.file_name ? `document "${msg.document.file_name}"` : 'document'
+			bytes = tgBytes(msg.document.file_size)
 			fileName = msg.document.file_name
 			mime = msg.document.mime_type
 		} else {
 			return null
 		}
 
-		if (!fileId) return null
+		const fail = (tooLarge: boolean): TgDownload => ({ media: null, label, bytes, tooLarge })
+		if (bytes != null && bytes > TG_DOWNLOAD_CAP_BYTES) return fail(true)
+		if (!fileId) return fail(false)
 		const buffer = await downloadTgFile(tg, fileId)
-		if (!buffer) return null
-		return { kind, buffer, fileName, mime }
+		if (buffer === 'too-large') return fail(true)
+		if (!buffer) return fail(false)
+		return { media: { kind, buffer, fileName, mime }, label, bytes, tooLarge: false }
 	} catch {
 		return null
 	}
@@ -654,22 +737,6 @@ function fileIdOf(f: any): string | null {
 	if (typeof f === 'string') return f
 	if (typeof f.file_id === 'string') return f.file_id
 	return null
-}
-
-// True when the Telegram message carries an attachment node (so a null
-// download means failure, not "no media"). Mirrors downloadTgMedia's detection.
-function hasTgMediaNode(msg: any): boolean {
-	if (!msg || typeof msg !== 'object') return false
-	return !!(
-		msg.sticker ||
-		msg.photo?.length ||
-		msg.video ||
-		msg.video_note ||
-		msg.animation ||
-		msg.voice ||
-		msg.audio ||
-		msg.document
-	)
 }
 
 // Best-effort ⚠️ notice to the affected topic so a relay failure is visible
@@ -702,7 +769,7 @@ function shortErr(e: unknown): string {
 	return String(raw).split('\n')[0].slice(0, 160) || 'unknown error'
 }
 
-async function downloadTgFile(tg: Bot, fileId: string): Promise<Uint8Array | null> {
+async function downloadTgFile(tg: Bot, fileId: string): Promise<Uint8Array | 'too-large' | null> {
 	try {
 		const token = Deno.env.get('TELEGRAM_BOT_TOKEN')!
 		const file = await tg.api.getFile(fileId)
@@ -710,7 +777,12 @@ async function downloadTgFile(tg: Bot, fileId: string): Promise<Uint8Array | nul
 		const res = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`)
 		if (!res.ok) return null
 		return new Uint8Array(await res.arrayBuffer())
-	} catch {
+	} catch (e) {
+		// Second layer behind the file_size pre-check (size can be absent
+		// on some nodes): getFile itself refuses >20 MB files.
+		const msg = (e as { description?: unknown; message?: unknown })?.description ??
+			(e as { message?: unknown })?.message ?? ''
+		if (/too big|too large|file_too_big/i.test(String(msg))) return 'too-large'
 		return null
 	}
 }

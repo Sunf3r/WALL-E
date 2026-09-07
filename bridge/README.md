@@ -96,8 +96,10 @@ deno task start:dev   # or: pm2 start conf/ecosystem.config.cjs --attach
   as GIFs (`sendAnimation` / `gifPlayback`). Telegram video stickers transcode to animated WebP via
   ffmpeg (≤500KB, else video fallback); `.tgs` (Lottie) still relays as a document — ffmpeg can't
   render it.
-- Relay failures post a short ⚠️ notice to the affected topic (failed downloads and sends); the
-  notice itself never throws or loops.
+- Relay failures post a specific ⚠️ notice to the affected topic: failed downloads name the
+  attachment kind and size (documents include the file name), Telegram files over the 20 MB bot
+  download limit are skipped up front with a notice naming the cap, and album failures say which
+  item (`item 3 of 5`) or how many photos stalled. The notice itself never throws or loops.
 - Polls stay a text fallback TG→WA and a native (non-anonymous) TG poll WA→TG. Live vote sync is
   platform-blocked both ways: WA polls are immutable after creation and TG polls can't be edited
   after sending (only stopped).
