@@ -51,6 +51,28 @@ function getPythonCommand(): string {
 }
 
 // Manual environment loader
+function stripInlineComment(val: string): string {
+	let out = ''
+	let quote: string | null = null
+	for (let i = 0; i < val.length; i++) {
+		const c = val[i]
+		if (quote) {
+			out += c
+			if (c === quote) quote = null
+		} else if (c === "'" || c === '"') {
+			quote = c
+			out += c
+		} else if (c === '#') {
+			const prev = out[out.length - 1]
+			if (prev === undefined || prev === ' ' || prev === '\t') break
+			out += c
+		} else {
+			out += c
+		}
+	}
+	return out.trim()
+}
+
 function loadEnv() {
 	const envPath = join('conf', '.env')
 
@@ -63,10 +85,10 @@ function loadEnv() {
 			const index = trimmed.indexOf('=')
 			if (index > 0) {
 				const key = trimmed.substring(0, index).trim()
-				let val = trimmed.substring(index + 1).trim()
+				let val = stripInlineComment(trimmed.substring(index + 1).trim())
 				if (
-					(val.startsWith("'") && val.endsWith("'")) ||
-					(val.startsWith('"') && val.endsWith('"'))
+					(val.startsWith("'") && val.endsWith("'") && val.length >= 2) ||
+					(val.startsWith('"') && val.endsWith('"') && val.length >= 2)
 				) {
 					val = val.substring(1, val.length - 1)
 				}
