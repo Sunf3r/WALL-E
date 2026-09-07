@@ -9,7 +9,6 @@
  *   • Adaptive quality: retries at lower quality/fps until output ≤ maxSize
  *   • Temp files are namespaced per job to prevent collisions between workers
  */
-// node imports removed
 import type { StickerFormat } from '@plugin/sticker/types.ts'
 
 const SIZE = 512
