@@ -147,6 +147,7 @@ function findMediaNode(content: any): any {
 }
 
 // download msg media
+const MEDIA_CACHE_MAX_BYTES = 20 * 1024 * 1024
 async function downloadMedia(raw: any, types: [MsgTypes, str]) {
 	if (!isMedia(types[0])) return
 	const inner = unwrapContent(raw?.message || raw)
@@ -164,6 +165,8 @@ async function downloadMedia(raw: any, types: [MsgTypes, str]) {
 	}
 
 	if (cache.media.has(msg.url)) return keyObj // return metadata to reuse it later
+	const declaredSize = Number(msg.fileLength?.low ?? msg.fileLength ?? 0)
+	const skipCache = declaredSize > MEDIA_CACHE_MAX_BYTES
 	const buffer = await downloadMediaMessage(
 		raw.message ? raw : { message: raw },
 		'buffer',
@@ -175,6 +178,7 @@ async function downloadMedia(raw: any, types: [MsgTypes, str]) {
 	).catch((_e) => {}) //print('DOWNLOAD', 'Error downloading media', e.stack, 'red')})
 
 	if (!buffer) return
+	if (skipCache || (buffer as Buffer).length > MEDIA_CACHE_MAX_BYTES) return keyObj
 
 	// media cache
 	cache.media.add(msg.url, {
