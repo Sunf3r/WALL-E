@@ -778,6 +778,7 @@ async function sendToTopic(
 			const sent = await tg.api.sendMessage(supergroupId, body, {
 				...thread,
 				...rich,
+				...reply,
 			})
 			save(sent.message_id, 'text')
 		}
@@ -825,7 +826,7 @@ async function sendToTopic(
 		}
 		save(sentNote.message_id, 'media')
 		if (body) {
-			const sent = await tg.api.sendMessage(supergroupId, body, { ...thread, ...rich })
+			const sent = await tg.api.sendMessage(supergroupId, body, { ...thread, ...rich, ...reply })
 			save(sent.message_id, 'text')
 		}
 		return
@@ -895,7 +896,12 @@ async function sendToTopic(
 
 	// Captions are capped at 1024 chars — send the overflow as a follow-up.
 	if (caption === undefined && body) {
-		await tg.api.sendMessage(supergroupId, body, { message_thread_id: topicId, ...rich })
+		const overflow = await tg.api.sendMessage(supergroupId, body, {
+			message_thread_id: topicId,
+			...rich,
+			...reply,
+		})
+		save(overflow.message_id, 'text')
 	}
 }
 
