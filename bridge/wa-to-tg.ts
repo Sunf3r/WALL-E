@@ -14,6 +14,7 @@ import { logger } from '@util/proto.ts'
 import bot from '@plugin/bot.ts'
 import type { BridgeDB, MirrorKind, ReplyMapRow } from './db.ts'
 import type { RateLimiter } from './rate-limiter.ts'
+import { getRetryAfterSeconds } from './rate-limiter.ts'
 import { formatBytes, parseVcard, type TgEntity, waMarkdownToTgEntities } from './format.ts'
 
 export { formatBytes }
@@ -32,6 +33,15 @@ function cacheGroupName(jid: string, name: string): void {
 		const oldest = groupNameCache.keys().next().value
 		if (oldest !== undefined) groupNameCache.delete(oldest)
 	}
+}
+
+// Single Telegram API call through the flood-aware queue. EVERY api.*
+// call in this module must go through here, so each API call — not each
+// logical message — gets its own spacing slot, and 429s pause + retry the
+// queue instead of cascading into drops.
+function tgCall<T>(fn: () => Promise<T>, label = 'send'): Promise<T> {
+	if (!limiter) return fn()
+	return limiter.enqueue(fn, label)
 }
 
 export function attachWaRelay(tgBot: Bot, bridgeDb: BridgeDB, rateLimiter: RateLimiter): void {
@@ -236,13 +246,14 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 			} else {
 				// Anything else flushes pending albums first so chat order
 				// is preserved, then sends immediately as before.
+				// sendToTopic enqueues each Telegram API call on the
+				// limiter itself, so this awaits delivery (with flood
+				// retries) instead of just queueing.
 				await flushPendingAlbums(jid)
-				await limiter.enqueue(() =>
-					sendToTopic(tid, body, entities, media, special, jid, m, {
-						tgId: replyToTgId,
-						header: stickerFallback ? quoteHeader : null,
-					})
-				)
+				await sendToTopic(tid, body, entities, media, special, jid, m, {
+					tgId: replyToTgId,
+					header: stickerFallback ? quoteHeader : null,
+				})
 			}
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA message:', e)
@@ -330,12 +341,10 @@ async function flushAlbum(key: string): Promise<void> {
 
 	if (items.length === 1) {
 		const it = items[0]
-		await limiter.enqueue(() =>
-			sendToTopic(it.topicId, it.body, it.entities, it.media, null, jid, it.m, {
-				tgId: it.replyToTgId,
-				header: null,
-			})
-		).catch((e) => console.error('[BRIDGE] failed to relay album singleton:', e))
+		await sendToTopic(it.topicId, it.body, it.entities, it.media, null, jid, it.m, {
+			tgId: it.replyToTgId,
+			header: null,
+		}).catch((e) => console.error('[BRIDGE] failed to relay album singleton:', e))
 		return
 	}
 
@@ -343,78 +352,81 @@ async function flushAlbum(key: string): Promise<void> {
 	for (let c = 0; c < items.length; c += 10) {
 		const chunk = items.slice(c, c + 10)
 		const first = chunk[0]
-		await limiter.enqueue(async () => {
-			try {
-				const inputMedia = chunk.map((it, i) => {
-					const file = new InputFile(
-						it.media.buffer,
-						it.media.fileName || `file.${extOf(it.media)}`,
-					)
-					const captioned: Record<string, unknown> = i === 0 && first.body
-						? { caption: first.body.slice(0, 1024) }
-						: {}
-					if (i === 0 && first.body && first.entities.length > 0) {
-						captioned.caption_entities = first.entities
-					}
-					// GIFs ride as plain videos inside media groups (the Bot
-					// API has no animation group item).
-					return it.media.kind === 'image'
-						? { type: 'photo', media: file, ...captioned }
-						: { type: 'video', media: file, ...captioned }
-				})
-				const reply = first.replyToTgId
-					? {
-						reply_parameters: {
-							message_id: first.replyToTgId,
-							allow_sending_without_reply: true,
-						},
-					}
-					: undefined
-				const sentArr = await tg!.api.sendMediaGroup(supergroupId, inputMedia as any, {
-					message_thread_id: first.topicId,
-					...reply,
-				}) as { message_id: number }[]
-				sentArr.forEach((s, i) => {
-					const it = chunk[i]
-					if (s && it) {
-						db!.saveReplyMap(
-							s.message_id,
-							jid,
-							it.m.key?.id || '',
-							JSON.stringify(it.m.key || {}),
-							'media',
-							storedText(it.body),
-							storedEntities(it.entities),
-						)
-					}
-				})
-				// Captions beyond the first don't fit in a media group —
-				// deliver them as one follow-up instead of dropping them.
-				const extras = chunk.slice(1).map((it) => it.body).filter((b) => b)
-				if (extras.length > 0) {
-					const followBody = extras.join('\n')
-					const sent = await tg!.api.sendMessage(supergroupId, followBody, {
+		try {
+			const inputMedia = chunk.map((it, i) => {
+				const file = new InputFile(
+					it.media.buffer,
+					it.media.fileName || `file.${extOf(it.media)}`,
+				)
+				const captioned: Record<string, unknown> = i === 0 && first.body
+					? { caption: first.body.slice(0, 1024) }
+					: {}
+				if (i === 0 && first.body && first.entities.length > 0) {
+					captioned.caption_entities = first.entities
+				}
+				// GIFs ride as plain videos inside media groups (the Bot
+				// API has no animation group item).
+				return it.media.kind === 'image'
+					? { type: 'photo', media: file, ...captioned }
+					: { type: 'video', media: file, ...captioned }
+			})
+			const reply = first.replyToTgId
+				? {
+					reply_parameters: {
+						message_id: first.replyToTgId,
+						allow_sending_without_reply: true,
+					},
+				}
+				: undefined
+			const sentArr = await tgCall(
+				() =>
+					tg!.api.sendMediaGroup(supergroupId, inputMedia as any, {
 						message_thread_id: first.topicId,
-					})
-					const last = chunk[chunk.length - 1]
+						...reply,
+					}),
+				'media-group',
+			) as { message_id: number }[]
+			sentArr.forEach((s, i) => {
+				const it = chunk[i]
+				if (s && it) {
 					db!.saveReplyMap(
-						sent.message_id,
+						s.message_id,
 						jid,
-						last.m.key?.id || '',
-						JSON.stringify(last.m.key || {}),
-						'text',
-						storedText(followBody),
-						null,
+						it.m.key?.id || '',
+						JSON.stringify(it.m.key || {}),
+						'media',
+						storedText(it.body),
+						storedEntities(it.entities),
 					)
 				}
-			} catch (e) {
-				console.error('[BRIDGE] failed to relay album group:', e)
-				await notifyTopic(
-					first.topicId,
-					`⚠️ Couldn't relay a photo group (${chunk.length} photos): ${shortErr(e)}`,
+			})
+			// Captions beyond the first don't fit in a media group —
+			// deliver them as one follow-up instead of dropping them.
+			const extras = chunk.slice(1).map((it) => it.body).filter((b) => b)
+			if (extras.length > 0) {
+				const followBody = extras.join('\n')
+				const sent = await tgCall(() =>
+					tg!.api.sendMessage(supergroupId, followBody, {
+						message_thread_id: first.topicId,
+					}), 'message')
+				const last = chunk[chunk.length - 1]
+				db!.saveReplyMap(
+					sent.message_id,
+					jid,
+					last.m.key?.id || '',
+					JSON.stringify(last.m.key || {}),
+					'text',
+					storedText(followBody),
+					null,
 				)
 			}
-		})
+		} catch (e) {
+			console.error('[BRIDGE] failed to relay album group:', e)
+			await notifyTopic(
+				first.topicId,
+				`⚠️ Couldn't relay a photo group (${chunk.length} photos): ${shortErr(e)}`,
+			)
+		}
 	}
 }
 
@@ -454,9 +466,14 @@ function phoneOf(jid: string | undefined | null): string {
 // own messages.
 async function notifyTopic(topicId: number, line: string): Promise<void> {
 	if (!tg || !limiter) return
+	// Deprioritized during floods: the limiter already pauses the queue on
+	// 429, so a burst of failures collapses into delayed notices instead of
+	// extra load. A notice that exhausts its flood retries just drops — the
+	// server log already has the details.
 	try {
-		await limiter.enqueue(() =>
-			tg!.api.sendMessage(supergroupId, line, { message_thread_id: topicId })
+		await tgCall(
+			() => tg!.api.sendMessage(supergroupId, line, { message_thread_id: topicId }),
+			'notice',
 		)
 	} catch {
 		// The notice itself failed — the server log already has the details.
@@ -506,39 +523,45 @@ async function handleWaReactions(
 				continue
 			}
 			const payload = emoji ? [{ type: 'emoji' as const, emoji }] : []
-			await limiter.enqueue(async () => {
-				try {
-					await tg!.api.setMessageReaction(supergroupId, target.tg_msg_id, payload as any)
-				} catch (e) {
-					// REACTION_INVALID = the emoji isn't usable here (not a
-					// Telegram reaction at all, or disabled in this chat's
-					// Settings → Reactions). Retry once with the default
-					// reaction so the sentiment still lands in the topic
-					// instead of being silently dropped. A failing default
-					// (reactions fully disabled?) gives up quietly — no
-					// recursion. Never rethrows — reactions must not spam
-					// the limiter log.
-					const desc = reactionErrorDescription(e)
-					if (desc.includes('REACTION_INVALID') && emoji) {
-						try {
-							await tg!.api.setMessageReaction(supergroupId, target.tg_msg_id, [
-								{ type: 'emoji', emoji: DEFAULT_TG_REACTION },
-							] as any)
-						} catch {
-							// Default also rejected (reactions fully disabled?) — give up quietly.
-						}
-						if (!warnedReactions.has(emoji)) {
-							warnedReactions.add(emoji)
-							console.warn(
-								`[BRIDGE] reaction ${emoji} rejected by Telegram (REACTION_INVALID): ` +
-									`not a Telegram reaction emoji or disabled in this supergroup's Settings → Reactions. Used default ${DEFAULT_TG_REACTION} instead.`,
-							)
-						}
-						return
+			try {
+				await tgCall(
+					() =>
+						tg!.api.setMessageReaction(supergroupId, target.tg_msg_id, payload as any),
+					'reaction',
+				)
+			} catch (e) {
+				// REACTION_INVALID = the emoji isn't usable here (not a
+				// Telegram reaction at all, or disabled in this chat's
+				// Settings → Reactions). Retry once with the default
+				// reaction so the sentiment still lands in the topic
+				// instead of being silently dropped. A failing default
+				// (reactions fully disabled?) gives up quietly — no
+				// recursion. Never rethrows — reactions must not spam
+				// the limiter log.
+				const desc = reactionErrorDescription(e)
+				if (desc.includes('REACTION_INVALID') && emoji) {
+					try {
+						await tgCall(
+							() =>
+								tg!.api.setMessageReaction(supergroupId, target.tg_msg_id, [
+									{ type: 'emoji', emoji: DEFAULT_TG_REACTION },
+								] as any),
+							'reaction',
+						)
+					} catch {
+						// Default also rejected (reactions fully disabled?) — give up quietly.
 					}
-					throw e
+					if (!warnedReactions.has(emoji)) {
+						warnedReactions.add(emoji)
+						console.warn(
+							`[BRIDGE] reaction ${emoji} rejected by Telegram (REACTION_INVALID): ` +
+								`not a Telegram reaction emoji or disabled in this supergroup's Settings → Reactions. Used default ${DEFAULT_TG_REACTION} instead.`,
+						)
+					}
+					return
 				}
-			})
+				throw e
+			}
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA reaction:', e)
 		}
@@ -621,28 +644,28 @@ async function spoilerTgMirror(target: ReplyMapRow): Promise<boolean> {
 	const rich = kept.length > 0 ? { entities: kept } : undefined
 	let ok = false
 	try {
-		await limiter.enqueue(async () => {
-			try {
-				if (kind === 'media') {
-					const caption = (SPOILER_MARKER + orig).slice(0, 1024)
-					const cEnts = kept.filter((e) => e.offset + e.length <= caption.length)
-					await tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
+		try {
+			if (kind === 'media') {
+				const caption = (SPOILER_MARKER + orig).slice(0, 1024)
+				const cEnts = kept.filter((e) => e.offset + e.length <= caption.length)
+				await tgCall(() =>
+					tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
 						caption,
 						caption_entities: cEnts.length > 0 ? cEnts : undefined,
-					})
-				} else {
-					await tg!.api.editMessageText(
+					}), 'edit-caption')
+			} else {
+				await tgCall(() =>
+					tg!.api.editMessageText(
 						supergroupId,
 						target.tg_msg_id,
 						SPOILER_MARKER + orig,
 						rich,
-					)
-				}
-				ok = true
-			} catch {
-				ok = false
+					), 'edit-text')
 			}
-		})
+			ok = true
+		} catch {
+			ok = false
+		}
 	} catch {
 		ok = false
 	}
@@ -665,14 +688,12 @@ async function deleteTgMirror(jid: string, id: string): Promise<void> {
 		return
 	}
 	if (await spoilerTgMirror(target)) return
-	await limiter.enqueue(async () => {
-		try {
-			await tg!.api.deleteMessage(supergroupId, target.tg_msg_id)
-			db!.deleteReplyMap(target.tg_msg_id)
-		} catch (e) {
-			logDeleteFailure(target.tg_msg_id, e)
-		}
-	})
+	try {
+		await tgCall(() => tg!.api.deleteMessage(supergroupId, target.tg_msg_id), 'delete')
+		db!.deleteReplyMap(target.tg_msg_id)
+	} catch (e) {
+		logDeleteFailure(target.tg_msg_id, e)
+	}
 }
 
 function logDeleteFailure(tgMsgId: number, err: unknown): void {
@@ -741,10 +762,12 @@ const WA_TO_TG_REACTION_FALLBACK: Record<string, string> = {
 }
 
 async function createForumTopic(displayName: string, _isGroup: boolean): Promise<number> {
-	if (!tg || !limiter) throw new Error('Telegram bot not initialized')
+	if (!tg) throw new Error('Telegram bot not initialized')
 	const name = (displayName || 'Unknown').replace(/[\n\r]+/g, ' ').trim().slice(0, 128) ||
 		'Unknown'
-	const topic = await limiter.enqueue(() => tg!.api.createForumTopic(supergroupId, name))
+	// Topic creation is a Bot API call like any other — it goes through the
+	// limiter so a burst of new chats can't flood the supergroup budget.
+	const topic = await tgCall(() => tg!.api.createForumTopic(supergroupId, name), 'new-topic')
 	return topic.message_thread_id
 }
 
@@ -761,6 +784,9 @@ async function sendToTopic(
 	quote: { tgId: number | null; header: string | null },
 ): Promise<void> {
 	if (!tg || !db) return
+	// Local non-null handle: module-level 'tg' narrowing does not survive
+	// inside the tgCall closures below, so capture it once here.
+	const api = tg.api
 	// Native Telegram quote when the original was bridged. allow_sending_
 	// without_reply keeps the send alive if that message was deleted since.
 	const reply = quote.tgId
@@ -784,26 +810,29 @@ async function sendToTopic(
 
 	// Location / contact / poll have no caption concept: the content goes
 	// first (carrying the native reply), then any text as a follow-up.
+	// Each API call is its own limiter slot.
 	if (special) {
 		const sentId = await sendSpecial(topicId, special, reply)
 		if (sentId) save(sentId, 'special')
 		if (body) {
-			const sent = await tg.api.sendMessage(supergroupId, body, {
-				...thread,
-				...rich,
-				...reply,
-			})
+			const sent = await tgCall(() =>
+				api.sendMessage(supergroupId, body, {
+					...thread,
+					...rich,
+					...reply,
+				}), 'message')
 			save(sent.message_id, 'text')
 		}
 		return
 	}
 
 	if (!media) {
-		const sent = await tg.api.sendMessage(supergroupId, body, {
-			message_thread_id: topicId,
-			...rich,
-			...reply,
-		})
+		const sent = await tgCall(() =>
+			api.sendMessage(supergroupId, body, {
+				message_thread_id: topicId,
+				...rich,
+				...reply,
+			}), 'message')
 		save(sent.message_id, 'text')
 		return
 	}
@@ -811,10 +840,12 @@ async function sendToTopic(
 	// Stickers take no caption: deliver an unmapped quote header as its own
 	// quote-styled message so the context still lands in the topic.
 	if (media.kind === 'sticker' && quote.header && !quote.tgId) {
-		await tg.api.sendMessage(supergroupId, quote.header, {
-			message_thread_id: topicId,
-			entities: [{ type: 'blockquote', offset: 0, length: quote.header.length }],
-		})
+		const header: string = quote.header
+		await tgCall(() =>
+			api.sendMessage(supergroupId, header, {
+				message_thread_id: topicId,
+				entities: [{ type: 'blockquote', offset: 0, length: header.length }],
+			}), 'message')
 	}
 
 	const caption = body.length > 1024 ? undefined : (body || undefined)
@@ -828,22 +859,29 @@ async function sendToTopic(
 	if (media.kind === 'round') {
 		let sentNote: { message_id: number }
 		try {
-			sentNote = await tg.api.sendVideoNote(supergroupId, file, { ...thread, ...reply })
-		} catch {
-			sentNote = await tg.api.sendVideo(supergroupId, file, {
-				...thread,
-				caption,
-				...captionEntities,
-				...reply,
-			})
+			sentNote = await tgCall(
+				() => api.sendVideoNote(supergroupId, file, { ...thread, ...reply }),
+				'video-note',
+			)
+		} catch (e) {
+			// A flood-exhausted send must propagate, not fall back — the
+			// fallback would just 429 again. Only non-429 failures (e.g.
+			// non-round-compatible file) degrade to a plain video.
+			if (getRetryAfterSeconds(e) !== null) throw e
+			sentNote = await tgCall(() =>
+				api.sendVideo(supergroupId, file, {
+					...thread,
+					caption,
+					...captionEntities,
+					...reply,
+				}), 'video')
 		}
 		save(sentNote.message_id, 'media')
 		if (body) {
-			const sent = await tg.api.sendMessage(supergroupId, body, {
-				...thread,
-				...rich,
-				...reply,
-			})
+			const sent = await tgCall(
+				() => api.sendMessage(supergroupId, body, { ...thread, ...rich, ...reply }),
+				'message',
+			)
 			save(sent.message_id, 'text')
 		}
 		return
@@ -853,80 +891,95 @@ async function sendToTopic(
 
 	switch (media.kind) {
 		case 'image':
-			sent = await tg.api.sendPhoto(supergroupId, file, {
-				...thread,
-				caption,
-				...captionEntities,
-				...reply,
-			})
+			sent = await tgCall(() =>
+				api.sendPhoto(supergroupId, file, {
+					...thread,
+					caption,
+					...captionEntities,
+					...reply,
+				}), 'photo')
 			break
 		case 'video':
 		case 'gif':
 			// WA GIFs are mp4 videos with gifPlayback — Telegram renders them
 			// as GIFs (looping, muted) via sendAnimation instead of sendVideo.
 			sent = media.kind === 'gif'
-				? await tg.api.sendAnimation(supergroupId, file, {
-					...thread,
-					caption,
-					...captionEntities,
-					...reply,
-				})
-				: await tg.api.sendVideo(supergroupId, file, {
-					...thread,
-					caption,
-					...captionEntities,
-					...reply,
-				})
+				? await tgCall(() =>
+					api.sendAnimation(supergroupId, file, {
+						...thread,
+						caption,
+						...captionEntities,
+						...reply,
+					}), 'animation')
+				: await tgCall(() =>
+					api.sendVideo(supergroupId, file, {
+						...thread,
+						caption,
+						...captionEntities,
+						...reply,
+					}), 'video')
 			break
 		case 'voice':
-			sent = await tg.api.sendVoice(supergroupId, file, {
-				...thread,
-				caption,
-				...captionEntities,
-				...reply,
-			})
+			sent = await tgCall(() =>
+				api.sendVoice(supergroupId, file, {
+					...thread,
+					caption,
+					...captionEntities,
+					...reply,
+				}), 'voice')
 			break
 		case 'audio':
-			sent = await tg.api.sendAudio(supergroupId, file, {
-				...thread,
-				caption,
-				...captionEntities,
-				...reply,
-			})
+			sent = await tgCall(() =>
+				api.sendAudio(supergroupId, file, {
+					...thread,
+					caption,
+					...captionEntities,
+					...reply,
+				}), 'audio')
 			break
 		case 'sticker':
 			try {
-				sent = await tg.api.sendSticker(supergroupId, file, {
-					message_thread_id: topicId,
-					...reply,
-				})
-			} catch {
-				sent = await tg.api.sendDocument(supergroupId, file, {
+				sent = await tgCall(() =>
+					api.sendSticker(supergroupId, file, {
+						message_thread_id: topicId,
+						...reply,
+					}), 'sticker')
+			} catch (e) {
+				// A flood-exhausted send must propagate, not fall back — the
+				// fallback would just 429 again.
+				if (getRetryAfterSeconds(e) !== null) throw e
+				sent = await tgCall(() =>
+					api.sendDocument(supergroupId, file, {
+						...thread,
+						caption,
+						...captionEntities,
+						...reply,
+					}), 'document')
+			}
+			break
+		default:
+			sent = await tgCall(() =>
+				api.sendDocument(supergroupId, file, {
 					...thread,
 					caption,
 					...captionEntities,
 					...reply,
-				})
-			}
-			break
-		default:
-			sent = await tg.api.sendDocument(supergroupId, file, {
-				...thread,
-				caption,
-				...captionEntities,
-				...reply,
-			})
+				}), 'document')
 			break
 	}
 	save(sent.message_id, media.kind === 'sticker' ? 'sticker' : 'media')
 
 	// Captions are capped at 1024 chars — send the overflow as a follow-up.
 	if (caption === undefined && body) {
-		const overflow = await tg.api.sendMessage(supergroupId, body, {
-			message_thread_id: topicId,
-			...rich,
-			...reply,
-		})
+		const overflow = await tgCall(
+			() =>
+				api.sendMessage(supergroupId, body, {
+					message_thread_id: topicId,
+					...rich,
+					...reply,
+				}),
+			'message',
+		)
 		save(overflow.message_id, 'text')
 	}
 }
@@ -941,22 +994,28 @@ async function sendSpecial(
 		| undefined,
 ): Promise<number | null> {
 	if (!tg) return null
+	const api = tg.api
 	const thread = { message_thread_id: topicId } as const
 	switch (special.kind) {
 		case 'location': {
-			const sent = await tg.api.sendLocation(
-				supergroupId,
-				special.latitude,
-				special.longitude,
-				{ ...thread, ...reply },
-			)
+			const sent = await tgCall(() =>
+				api.sendLocation(
+					supergroupId,
+					special.latitude,
+					special.longitude,
+					{ ...thread, ...reply },
+				), 'location')
 			return sent.message_id
 		}
 		case 'contact': {
-			const sent = await tg.api.sendContact(supergroupId, special.phone, special.name, {
-				...thread,
-				...reply,
-			})
+			const sent = await tgCall(
+				() =>
+					api.sendContact(supergroupId, special.phone, special.name, {
+						...thread,
+						...reply,
+					}),
+				'contact',
+			)
 			return sent.message_id
 		}
 		case 'poll': {
@@ -968,16 +1027,17 @@ async function sendSpecial(
 			// Telegram needs 2–10 options; shorter lists were already
 			// degraded to text by the caller, so this is just a guard.
 			if (options.length < 2) return null
-			const sent = await tg.api.sendPoll(
-				supergroupId,
-				question,
-				options.map((text) => ({ text })),
-				{
-					...thread,
-					is_anonymous: false,
-					...reply,
-				},
-			)
+			const sent = await tgCall(() =>
+				api.sendPoll(
+					supergroupId,
+					question,
+					options.map((text) => ({ text })),
+					{
+						...thread,
+						is_anonymous: false,
+						...reply,
+					},
+				), 'poll')
 			return sent.message_id
 		}
 	}
@@ -1109,32 +1169,39 @@ async function handleWaEdits(
 			const entities = parsed.entities.map((e) => ({ ...e, offset: e.offset + label.length }))
 			const rich = entities.length > 0 ? { entities } : undefined
 
-			await limiter.enqueue(async () => {
-				try {
-					if (route === 'text' || route === 'both') {
-						await tg!.api.editMessageText(supergroupId, target.tg_msg_id, body, rich)
-						return
+			// Each attempt is its own limiter slot (never nested — a tgCall
+			// awaiting another tgCall would deadlock the FIFO queue).
+			try {
+				if (route === 'text' || route === 'both') {
+					await tgCall(
+						() => tg!.api.editMessageText(supergroupId, target.tg_msg_id, body, rich),
+						'edit-text',
+					)
+				} else {
+					await tgCall(() =>
+						tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
+							caption: body.slice(0, 1024) || undefined,
+						}), 'edit-caption')
+				}
+			} catch (first) {
+				// Legacy 'unknown' rows: the mirror type is a guess, so a
+				// failed text edit retries as caption before giving up.
+				if (route === 'both') {
+					try {
+						await tgCall(
+							() =>
+								tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
+									caption: body.slice(0, 1024) || undefined,
+								}),
+							'edit-caption',
+						)
+					} catch (second) {
+						logEditFailure(target.tg_msg_id, second, String(describeErr(first)))
 					}
-					await tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
-						caption: body.slice(0, 1024) || undefined,
-					})
-				} catch (first) {
-					// Legacy 'unknown' rows: the mirror type is a guess, so a
-					// failed text edit retries as caption before giving up.
-					if (route === 'both') {
-						try {
-							await tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
-								caption: body.slice(0, 1024) || undefined,
-							})
-							return
-						} catch (second) {
-							logEditFailure(target.tg_msg_id, second, String(describeErr(first)))
-							return
-						}
-					}
+				} else {
 					logEditFailure(target.tg_msg_id, first)
 				}
-			})
+			}
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA edit:', e)
 		}
@@ -1220,11 +1287,10 @@ async function handleGroupParticipants(upd: {
 			default:
 				return
 		}
-		await limiter.enqueue(() =>
+		await tgCall(() =>
 			tg!.api.sendMessage(supergroupId, line!, {
 				message_thread_id: mapping.telegram_topic_id,
-			})
-		)
+			}), 'service-line')
 	} catch (e) {
 		console.error('[BRIDGE] failed to relay group participants:', e)
 	}
@@ -1243,11 +1309,10 @@ async function handleGroupUpdates(
 			if (mapping.display_name === u.subject) continue
 			cacheGroupName(u.id, u.subject)
 			db.getOrCreate(u.id, mapping.telegram_topic_id, u.subject, mapping.chat_type)
-			await limiter.enqueue(() =>
+			await tgCall(() =>
 				tg!.api.editForumTopic(supergroupId, mapping.telegram_topic_id, {
 					name: u.subject!.slice(0, 128),
-				}).catch(() => false)
-			)
+				}).catch(() => false), 'edit-topic')
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay group update:', e)
 		}

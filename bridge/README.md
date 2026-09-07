@@ -22,8 +22,10 @@ approach.
   a bridged chat from the Telegram side.
 - **Mapping store** (`db.ts`): SQLite at `conf/gen/bridge.db` —
   `mappings(whatsapp_jid ↔ telegram_topic_id, …)` + `reply_map`.
-- **Rate limiting** (`rate-limiter.ts`): one global FIFO queue with ~1s spacing, because all topics
-  share the same supergroup chat (≈1 msg/sec limit).
+- **Rate limiting** (`rate-limiter.ts`): one global FIFO queue for **Telegram** API calls (all
+  topics share the same supergroup budget), plus a separate light queue for WhatsApp sends. Every
+  `tg.api.*` call is its own queue slot with ~3s spacing; on a 429 the failing send is retried after
+  the server's `retry_after` and the whole queue pauses — no more 429 cascades or silent drops.
 
 ## Telegram Bot Setup Steps
 
@@ -38,7 +40,11 @@ approach.
    ```env
    TELEGRAM_BOT_TOKEN='your-bot-token'
    TELEGRAM_SUPERGROUP_ID='-1001234567890'
-   RATE_LIMIT_MS=1000
+   # Optional flood-control tuning (defaults shown):
+   TELEGRAM_RATE_LIMIT_MS=3000   # spacing between Telegram sends (legacy name: RATE_LIMIT_MS)
+   WHATSAPP_RATE_LIMIT_MS=500    # spacing between WhatsApp sends
+   RATE_LIMIT_MAX_RETRIES=5      # retries per send after a 429 before dropping it
+   RATE_LIMIT_MAX_WAIT_MS=120000 # cap for a single flood wait
    ```
 
 ## Running

@@ -11,10 +11,23 @@ import { formatBytes, tgEntitiesToWa } from './format.ts'
 
 export { formatBytes }
 
-export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter): void {
+export function registerTgHandlers(
+	tg: Bot,
+	db: BridgeDB,
+	tgLimiter: RateLimiter,
+	waLimiter: RateLimiter,
+): void {
 	const supergroupId = String(Deno.env.get('TELEGRAM_SUPERGROUP_ID'))
 	const inSupergroup = (ctx: { chat?: { id?: string | number } }): boolean =>
 		String(ctx.chat?.id) === supergroupId
+
+	// Telegram API calls share the flood-aware global queue with the WA→TG
+	// side (same supergroup budget). WhatsApp sends use a separate, lighter
+	// queue — they don't consume Telegram budget and must not be stalled by
+	// a Telegram flood (nor stall Telegram traffic while uploading).
+	const tgCall = <T>(fn: () => Promise<T>, label = 'send'): Promise<T> =>
+		tgLimiter.enqueue(fn, label)
+	const waSend = <T>(fn: () => Promise<T>): Promise<T> => waLimiter.enqueue(fn, 'wa-send')
 
 	tg.command('start', async (ctx) => {
 		if (!inSupergroup(ctx)) return
@@ -131,7 +144,10 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			}
 			const name = (args.slice(1).join(' ') || `+${digits}`).replace(/[\n\r]+/g, ' ').trim()
 				.slice(0, 128) || `+${digits}`
-			const topic = await limiter.enqueue(() => tg.api.createForumTopic(supergroupId, name))
+			const topic = await tgCall(
+				() => tg.api.createForumTopic(supergroupId, name),
+				'new-topic',
+			)
 			db.getOrCreate(jid, topic.message_thread_id, name, '1:1')
 			await ctx.reply(
 				`Bridged +${digits} → topic #${topic.message_thread_id}. Write there to send.`,
@@ -170,7 +186,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			// (arriving as WA `messages.reaction` with fromMe=true) is
 			// recognized and skipped instead of re-reacting on Telegram.
 			db.markTgReact(entry.wa_jid, entry.wa_msg_id, emoji)
-			await limiter.enqueue(async () => {
+			await waSend(async () => {
 				await bot.sock.sendMessage(entry.wa_jid, { react: { text: emoji, key } })
 			})
 		} catch (e) {
@@ -229,7 +245,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 				const waContent = await buildWaContent(it.text, it.media, it.msg)
 				if (!waContent) continue
 				const useQuoted = !attached ? quoted : null
-				await limiter.enqueue(async () => {
+				await waSend(async () => {
 					const sent = await bot.sock.sendMessage(
 						mapping.whatsapp_jid,
 						waContent,
@@ -252,7 +268,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 					notified = true
 					await notifyTopic(
 						tg,
-						limiter,
+						tgLimiter,
 						first.topicId,
 						`⚠️ Couldn't send part of a Telegram album (item ${
 							i + 1
@@ -280,7 +296,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 					mutedNoticeAt.set(topicId, Date.now())
 					await notifyTopic(
 						tg,
-						limiter,
+						tgLimiter,
 						topicId,
 						'⚠️ This chat is archived — relay is paused. Use /reopen to resume.',
 					)
@@ -293,7 +309,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 					mutedNoticeAt.set(topicId, Date.now())
 					await notifyTopic(
 						tg,
-						limiter,
+						tgLimiter,
 						topicId,
 						'⚠️ This chat is muted — relay is paused. Use /unmute to resume.',
 					)
@@ -326,7 +342,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			if (unsupportedLabel && !text && !media) {
 				await notifyTopic(
 					tg,
-					limiter,
+					tgLimiter,
 					topicId,
 					`⚠️ A Telegram ${unsupportedLabel} has no WhatsApp equivalent — it didn't cross.`,
 				)
@@ -338,7 +354,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			if (dl && !dl.media) {
 				await notifyTopic(
 					tg,
-					limiter,
+					tgLimiter,
 					topicId,
 					tgDownloadFailureLine(dl.label, dl.bytes, dl.tooLarge),
 				)
@@ -369,7 +385,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 				(!!msg.location || !!msg.video_note ||
 					(msg.contact && !String(waContent.text || '').includes(textForWa)))
 
-			await limiter.enqueue(async () => {
+			await waSend(async () => {
 				const sent = await bot.sock.sendMessage(
 					mapping.whatsapp_jid,
 					waContent,
@@ -397,7 +413,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			if (topicId) {
 				await notifyTopic(
 					tg,
-					limiter,
+					tgLimiter,
 					topicId,
 					`⚠️ Couldn't send to WhatsApp: ${shortErr(e)}`,
 				)
@@ -435,7 +451,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			// message (arriving as WA `messages.update`) is recognized and
 			// skipped instead of re-editing the TG message it came from.
 			db.markTgEdit(mapping.whatsapp_jid, entry.wa_msg_id)
-			await limiter.enqueue(async () => {
+			await waSend(async () => {
 				await bot.sock.sendMessage(mapping.whatsapp_jid, { text, edit: key })
 				db.updateLastActive(mapping.whatsapp_jid)
 			})
@@ -789,15 +805,17 @@ function fileIdOf(f: any): string | null {
 // loops (the message handler ignores the bot's own messages).
 async function notifyTopic(
 	tg: Bot,
-	limiter: RateLimiter,
+	tgLimiter: RateLimiter,
 	topicId: number,
 	line: string,
 ): Promise<void> {
 	try {
-		await limiter.enqueue(() =>
-			tg.api.sendMessage(String(Deno.env.get('TELEGRAM_SUPERGROUP_ID')), line, {
-				message_thread_id: topicId,
-			})
+		await tgLimiter.enqueue(
+			() =>
+				tg.api.sendMessage(String(Deno.env.get('TELEGRAM_SUPERGROUP_ID')), line, {
+					message_thread_id: topicId,
+				}),
+			'notice',
 		)
 	} catch {
 		// The notice itself failed — the server log already has the details.
