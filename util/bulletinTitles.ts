@@ -67,5 +67,3 @@ export async function getNextBulletinTitle(): Promise<string> {
 
 	return title
 }
-
-

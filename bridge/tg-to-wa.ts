@@ -278,7 +278,12 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 				const last = mutedNoticeAt.get(topicId) ?? 0
 				if (Date.now() - last > 60 * 60 * 1000) {
 					mutedNoticeAt.set(topicId, Date.now())
-					await notifyTopic(tg, limiter, topicId, '⚠️ This chat is archived — relay is paused. Use /reopen to resume.')
+					await notifyTopic(
+						tg,
+						limiter,
+						topicId,
+						'⚠️ This chat is archived — relay is paused. Use /reopen to resume.',
+					)
 				}
 				return
 			}
@@ -286,7 +291,12 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 				const last = mutedNoticeAt.get(topicId) ?? 0
 				if (Date.now() - last > 60 * 60 * 1000) {
 					mutedNoticeAt.set(topicId, Date.now())
-					await notifyTopic(tg, limiter, topicId, '⚠️ This chat is muted — relay is paused. Use /unmute to resume.')
+					await notifyTopic(
+						tg,
+						limiter,
+						topicId,
+						'⚠️ This chat is muted — relay is paused. Use /unmute to resume.',
+					)
 				}
 				return
 			}
@@ -303,7 +313,8 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 				? 'venue'
 				: msg.game
 				? 'game'
-				: msg.video_chat_started || msg.video_chat_ended || msg.video_chat_participants_invited
+				: msg.video_chat_started || msg.video_chat_ended ||
+						msg.video_chat_participants_invited
 				? 'video chat event'
 				: null
 			if (

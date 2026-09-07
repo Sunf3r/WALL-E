@@ -248,7 +248,9 @@ function configureEnv(_rl: any) {
 			const trimmed = line.trim()
 			if (!trimmed || trimmed.startsWith('#')) continue
 			const idx = trimmed.indexOf('=')
-			if (idx > 0) existingEnv.set(trimmed.substring(0, idx).trim(), trimmed.substring(idx + 1))
+			if (idx > 0) {
+				existingEnv.set(trimmed.substring(0, idx).trim(), trimmed.substring(idx + 1))
+			}
 		}
 	}
 	const esc = (v: string | null) => `'${(v ?? '').replace(/'/g, `'"'"'`)}'`

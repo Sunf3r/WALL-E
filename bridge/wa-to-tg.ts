@@ -170,21 +170,23 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				special = null
 			}
 
-		if (!text && !media && !special) {
-			// A media node whose download failed would otherwise vanish
-			// silently — tell the topic what exactly didn't cross, with
-			// its kind and size when the node advertised them.
-			if (topicId !== null) {
-				const rawNode: any = unwrap(m.message)
-				const albumFallback = rawNode?.albumMessage ? 'album' : null
-				const label = dl?.label ?? albumFallback ?? 'message'
-				await notifyTopic(
-					topicId,
-					dl ? waDownloadFailureLine(dl.label, dl.bytes) : `⚠️ A WhatsApp ${label} has no Telegram equivalent — it didn't cross.`,
-				)
+			if (!text && !media && !special) {
+				// A media node whose download failed would otherwise vanish
+				// silently — tell the topic what exactly didn't cross, with
+				// its kind and size when the node advertised them.
+				if (topicId !== null) {
+					const rawNode: any = unwrap(m.message)
+					const albumFallback = rawNode?.albumMessage ? 'album' : null
+					const label = dl?.label ?? albumFallback ?? 'message'
+					await notifyTopic(
+						topicId,
+						dl
+							? waDownloadFailureLine(dl.label, dl.bytes)
+							: `⚠️ A WhatsApp ${label} has no Telegram equivalent — it didn't cross.`,
+					)
+				}
+				continue
 			}
-			continue
-		}
 
 			// WhatsApp quote → Telegram reply. Resolve the quoted stanzaId to
 			// the Telegram message mirroring the original; when the original
@@ -837,7 +839,11 @@ async function sendToTopic(
 		}
 		save(sentNote.message_id, 'media')
 		if (body) {
-			const sent = await tg.api.sendMessage(supergroupId, body, { ...thread, ...rich, ...reply })
+			const sent = await tg.api.sendMessage(supergroupId, body, {
+				...thread,
+				...rich,
+				...reply,
+			})
 			save(sent.message_id, 'text')
 		}
 		return
