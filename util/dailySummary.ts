@@ -54,7 +54,7 @@ function pushSubItemLines(menuLines: string[], subItems: string[]) {
 	for (const item of subItems) menuLines.push(`   ↳ _${item}_`)
 }
 
-export function generateFallbackSummary(input: DailySummaryInput): string {
+function generateFallbackSummary(input: DailySummaryInput): string {
 	const headerTitle = formatHeaderTitle(input.bulletinTitle || '🧠 *Boletim CEUNES*')
 	const sections: string[] = []
 

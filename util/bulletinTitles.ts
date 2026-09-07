@@ -68,12 +68,4 @@ export async function getNextBulletinTitle(): Promise<string> {
 	return title
 }
 
-/**
- * Peeks the current bulletin title without advancing the pointer.
- */
-export async function peekCurrentBulletinTitle(): Promise<string> {
-	const state = await loadState()
-	const index = state.currentIndex < state.shuffledOrder.length ? state.currentIndex : 0
-	const chosenIndex = state.shuffledOrder[index]
-	return titlesList[chosenIndex] || '🧠 *Resumo do estudante*'
-}
+
