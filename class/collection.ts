@@ -8,10 +8,6 @@ export default class Collection<K, V> extends Map<K, V> {
 		this.limit = limit === 0 ? 0 : limit || 100 // items limit
 	}
 
-	override get(key: K): V | undefined {
-		return super.get(key)
-	}
-
 	// Add: adds a value to the collection
 	// deno-lint-ignore require-await
 	async add(key: K, value?: V | object): Promise<V> {
@@ -69,19 +65,6 @@ export default class Collection<K, V> extends Map<K, V> {
 		for (const item of this.values()) arr.push(func(item))
 
 		return arr
-	}
-
-	// Reduce: same as Array#reduce
-	reduce(func: (preValue: V, nextValue: V) => V, initialValue: any = 0): any {
-		const items = this.values()
-		let previous = initialValue !== 0 ? initialValue : (items.next().value as V)
-		let nextResult: IteratorResult<V>
-
-		while (!(nextResult = items.next()).done) {
-			previous = func(previous, nextResult.value)
-		}
-
-		return previous
 	}
 
 	// Reverse: reverse items on a array
