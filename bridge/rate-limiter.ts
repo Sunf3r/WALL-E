@@ -21,6 +21,26 @@ export interface RateLimiterOptions {
 	retryBufferMs?: number
 }
 
+// Extract Telegram's error description (GrammyError shape or plain string).
+export function getErrorDescription(e: unknown): string {
+	try {
+		if (typeof e === 'string') return e
+		const anyErr = e as { description?: unknown; message?: unknown }
+		if (typeof anyErr?.description === 'string') return anyErr.description
+		if (typeof anyErr?.message === 'string') return anyErr.message
+	} catch {
+		// fall through to empty
+	}
+	return ''
+}
+
+// True when Telegram rejected the call because the reaction emoji is not
+// usable here (unknown to Telegram or disabled in chat settings). Callers
+// fall back to the default reaction, so this must stay quiet in the queue.
+export function isReactionInvalid(e: unknown): boolean {
+	return getErrorDescription(e).includes('REACTION_INVALID')
+}
+
 // Extract Telegram's "retry after N seconds" from a GrammyError (or any
 // error shaped like one). Returns seconds, or null when this is not a 429.
 export function getRetryAfterSeconds(e: unknown): number | null {
@@ -131,14 +151,19 @@ export class RateLimiter {
 								`queue=${this.queue.length})`,
 						)
 					} else {
-						if (retryAfter !== null) {
-							console.error(
-								`[BRIDGE] queued ${item.label} failed: giving up after ${item.attempts} ` +
-									`flood retries, dropping it:`,
-								e,
-							)
-						} else {
-							console.error(`[BRIDGE] queued ${item.label} failed:`, e)
+						// REACTION_INVALID is expected: the caller falls back to the
+						// default reaction and logs a one-line warn. Keep the queue
+						// quiet instead of dumping the full GrammyError stack.
+						if (!isReactionInvalid(e)) {
+							if (retryAfter !== null) {
+								console.error(
+									`[BRIDGE] queued ${item.label} failed: giving up after ${item.attempts} ` +
+										`flood retries, dropping it:`,
+									e,
+								)
+							} else {
+								console.error(`[BRIDGE] queued ${item.label} failed:`, e)
+							}
 						}
 						this.lastRun = Date.now()
 						item.reject(e)
