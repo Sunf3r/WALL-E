@@ -121,7 +121,6 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			const name = (args.slice(1).join(' ') || `+${digits}`).slice(0, 128)
 			const topic = await tg.api.createForumTopic(supergroupId, name)
 			db.getOrCreate(jid, topic.message_thread_id, name, '1:1')
-			console.log(`[BRIDGE] new topic #${topic.message_thread_id} for ${jid} (via /new)`)
 			await ctx.reply(
 				`Bridged +${digits} → topic #${topic.message_thread_id}. Write there to send.`,
 			)
@@ -146,17 +145,11 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 
 			const entry = db.getReplyMap(upd.message_id)
 			if (!entry) {
-				console.debug(
-					`[BRIDGE] skipping TG reaction: TG msg ${upd.message_id} not in reply_map`,
-				)
 				return
 			}
 			if (db.getByJid(entry.wa_jid)?.muted) return
 			const key = restoreWaKey(entry)
 			if (!key) {
-				console.debug(
-					`[BRIDGE] skipping TG reaction: no WA key for TG msg ${upd.message_id}`,
-				)
 				return
 			}
 
@@ -167,9 +160,6 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			db.markTgReact(entry.wa_jid, entry.wa_msg_id, emoji)
 			await limiter.enqueue(async () => {
 				await bot.sock.sendMessage(entry.wa_jid, { react: { text: emoji, key } })
-				console.debug(
-					`[BRIDGE] TG→WA reaction ${emoji || '(removed)'} on ${entry.wa_msg_id}`,
-				)
 			})
 		} catch (e) {
 			console.error('[BRIDGE] TG→WA reaction failed:', e)
@@ -273,7 +263,6 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			const mapping = db.getByTopicId(topicId)
 			if (!mapping || mapping.archived) return
 			if (mapping.muted) {
-				console.debug(`[BRIDGE] skipping TG message: ${mapping.whatsapp_jid} muted`)
 				return
 			}
 

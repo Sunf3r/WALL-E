@@ -96,8 +96,8 @@ async function checkReactionPrereqs(tg: Bot, supergroupId: string): Promise<void
 					'TG→WA reactions will not arrive until it is promoted.',
 			)
 		}
-	} catch (e) {
-		console.debug('[BRIDGE] reaction prereq check skipped:', e)
+	} catch {
+		// Prereq check failed (network, permissions) — reactions just stay silent.
 	}
 }
 

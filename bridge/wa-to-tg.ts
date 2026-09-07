@@ -125,7 +125,6 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 			if (!mapping || mapping.archived) {
 				const freshTopicId = await createForumTopic(displayName, isGroup)
 				mapping = db.getOrCreate(jid, freshTopicId, displayName, chatType)
-				console.log(`[BRIDGE] new topic #${freshTopicId} for ${jid} (${displayName})`)
 			} else {
 				if (mapping.display_name !== displayName) {
 					mapping = db.getOrCreate(jid, mapping.telegram_topic_id, displayName, chatType)
@@ -134,7 +133,6 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				}
 			}
 			if (mapping.muted) {
-				console.debug(`[BRIDGE] skipping WA message: ${jid} muted`)
 				continue
 			}
 			topicId = mapping.telegram_topic_id
@@ -469,9 +467,6 @@ async function handleWaReactions(
 			// by Telegram — nothing to attach the reaction to.
 			const target = db.getByWaMsgId(targetId, jid)
 			if (!target) {
-				console.debug(
-					`[BRIDGE] skipping WA reaction: target ${targetId} not in reply_map`,
-				)
 				continue
 			}
 
@@ -483,20 +478,12 @@ async function handleWaReactions(
 			// arrive with fromMe=true too — skipping those would drop every
 			// own-phone reaction silently (only the marked echo is skipped).
 			if (db.takeTgReact(jid, targetId, emoji || '')) {
-				console.debug(
-					`[BRIDGE] skipping echo of TG-initiated react ${emoji} on ${targetId}`,
-				)
 				continue
 			}
 			const payload = emoji ? [{ type: 'emoji' as const, emoji }] : []
 			await limiter.enqueue(async () => {
 				try {
 					await tg!.api.setMessageReaction(supergroupId, target.tg_msg_id, payload as any)
-					console.debug(
-						`[BRIDGE] WA→TG reaction ${
-							emoji || '(removed)'
-						} on TG msg ${target.tg_msg_id}`,
-					)
 				} catch (e) {
 					// REACTION_INVALID = the emoji isn't usable here (not a
 					// Telegram reaction at all, or disabled in this chat's
@@ -512,21 +499,10 @@ async function handleWaReactions(
 							await tg!.api.setMessageReaction(supergroupId, target.tg_msg_id, [
 								{ type: 'emoji', emoji: DEFAULT_TG_REACTION },
 							] as any)
-							console.debug(
-								`[BRIDGE] WA→TG reaction ${emoji} unsupported, used default ${DEFAULT_TG_REACTION} on TG msg ${target.tg_msg_id}`,
-							)
-						} catch (e2) {
-							console.debug(
-								`[BRIDGE] default reaction ${DEFAULT_TG_REACTION} also rejected on TG msg ${target.tg_msg_id}: ${
-									reactionErrorDescription(e2)
-								}`,
-							)
+						} catch {
+							// Default also rejected (reactions fully disabled?) — give up quietly.
 						}
-						if (warnedReactions.has(emoji)) {
-							console.debug(
-								`[BRIDGE] unsupported reaction ${emoji} (known, defaulted)`,
-							)
-						} else {
+						if (!warnedReactions.has(emoji)) {
 							warnedReactions.add(emoji)
 							console.warn(
 								`[BRIDGE] reaction ${emoji} rejected by Telegram (REACTION_INVALID): ` +
@@ -548,14 +524,13 @@ async function handleWaReactions(
 // `messages.delete` with `{ keys }` (per-message revoke) or `{ jid, all }`
 // (clear-chat, which has no meaningful topic equivalent and is skipped).
 // Needs the bot to be supergroup admin with delete rights; messages older
-// than ~48h or already gone just debug-log. The reply_map row is dropped on
+// than ~48h or already gone fail silently. The reply_map row is dropped on
 // success so later edits/reactions to the deleted message don't 400.
 async function handleWaDeletes(
 	payload: { keys?: proto.IMessageKey[]; jid?: string; all?: boolean },
 ): Promise<void> {
 	if (!db || !limiter || !tg) return
 	if (!payload?.keys || payload.keys.length === 0) {
-		console.debug('[BRIDGE] skipping WA delete: no keys (clear-chat or empty)')
 		return
 	}
 	for (const key of payload.keys) {
@@ -638,14 +613,8 @@ async function spoilerTgMirror(target: ReplyMapRow): Promise<boolean> {
 						rich,
 					)
 				}
-				console.debug(`[BRIDGE] WA→TG revoke spoilered TG msg ${target.tg_msg_id}`)
 				ok = true
-			} catch (e) {
-				console.debug(
-					`[BRIDGE] spoiler edit of TG msg ${target.tg_msg_id} failed, trying delete: ${
-						describeErr(e)
-					}`,
-				)
+			} catch {
 				ok = false
 			}
 		})
@@ -668,7 +637,6 @@ async function deleteTgMirror(jid: string, id: string): Promise<void> {
 	if (!mapping || mapping.archived || mapping.muted) return
 	const target = db.getByWaMsgId(id, jid)
 	if (!target) {
-		console.debug(`[BRIDGE] skipping WA delete: target ${id} not in reply_map`)
 		return
 	}
 	if (await spoilerTgMirror(target)) return
@@ -676,7 +644,6 @@ async function deleteTgMirror(jid: string, id: string): Promise<void> {
 		try {
 			await tg!.api.deleteMessage(supergroupId, target.tg_msg_id)
 			db!.deleteReplyMap(target.tg_msg_id)
-			console.debug(`[BRIDGE] WA→TG delete of TG msg ${target.tg_msg_id}`)
 		} catch (e) {
 			logDeleteFailure(target.tg_msg_id, e)
 		}
@@ -686,11 +653,11 @@ async function deleteTgMirror(jid: string, id: string): Promise<void> {
 function logDeleteFailure(tgMsgId: number, err: unknown): void {
 	const desc = reactionErrorDescription(err).toLowerCase()
 	const line = `[BRIDGE] delete of TG message ${tgMsgId} failed: ${reactionErrorDescription(err)}`
-	// Gone/expired mirrors and missing admin rights are environmental, not bugs.
+	// Gone/expired mirrors are environmental, not bugs — stay silent.
 	if (
 		desc.includes('not found') || desc.includes("can't be deleted") || desc.includes('too old')
 	) {
-		console.debug(line)
+		return
 	} else if (desc.includes('right') || desc.includes('admin') || desc.includes('forbidden')) {
 		console.warn(`${line} (bot needs delete rights in the supergroup)`)
 	} else {
@@ -698,7 +665,7 @@ function logDeleteFailure(tgMsgId: number, err: unknown): void {
 	}
 }
 
-// Emojis already warned about (REACTION_INVALID) so repeats stay at debug.
+// Emojis already warned about (REACTION_INVALID) so repeats stay silent.
 const warnedReactions = new Set<string>()
 
 // Default Telegram reaction set when an incoming WhatsApp reaction emoji is
@@ -1062,31 +1029,24 @@ async function handleWaEdits(
 			const jid = key?.remoteJid
 			const id = key?.id
 			if (!jid || !id || jid === 'status@broadcast') {
-				console.debug('[BRIDGE] skipping WA edit: missing jid/id')
 				continue
 			}
 			// Echo of our own TG→WA edit (marked before the WA send) — the
 			// TG message already shows this text; editing would 400.
 			if (db.takeTgEdit(jid, id)) {
-				console.debug(`[BRIDGE] skipping echo of TG-initiated edit ${id}`)
 				continue
 			}
 			const mapping = db.getByJid(jid)
 			if (!mapping || mapping.archived || mapping.muted) {
-				console.debug(`[BRIDGE] skipping WA edit ${id}: chat unmapped/archived/muted`)
 				continue
 			}
 			const target = db.getByWaMsgId(id, jid)
 			if (!target) {
-				console.debug(`[BRIDGE] skipping WA edit: target ${id} not in reply_map`)
 				continue
 			}
 
 			const route = routeEdit((target as { tg_kind?: string }).tg_kind)
 			if (route === 'skip') {
-				console.debug(
-					`[BRIDGE] skipping edit of non-editable TG mirror (kind=${target.tg_kind})`,
-				)
 				continue
 			}
 
@@ -1177,10 +1137,11 @@ function describeErr(err: unknown): string {
 
 function logEditFailure(tgMsgId: number, err: unknown, firstErr?: string): void {
 	const level = classifyEditError(err)
+	// 'not modified' duplicates are harmless — stay silent.
+	if (level === 'debug') return
 	const detail = `${describeErr(err)}${firstErr ? ` (first attempt: ${firstErr})` : ''}`
 	const line = `[BRIDGE] edit of TG message ${tgMsgId} failed (${level}): ${detail}`
-	if (level === 'debug') console.debug(line)
-	else if (level === 'warn') console.warn(line)
+	if (level === 'warn') console.warn(line)
 	else console.error(line)
 }
 
@@ -1242,7 +1203,6 @@ async function handleGroupUpdates(
 					name: u.subject!.slice(0, 128),
 				}).catch(() => false)
 			)
-			console.log(`[BRIDGE] renamed topic #${mapping.telegram_topic_id} to ${u.subject}`)
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay group update:', e)
 		}
