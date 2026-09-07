@@ -72,6 +72,12 @@ async function start() {
 // Save cache on both SIGINT (Ctrl+C) and SIGTERM (PM2 stop/restart)
 const onExit = async () => {
 	await cache.save()
+	try {
+		const { shutdownStickers } = await import('@plugin/sticker/index.ts')
+		await shutdownStickers()
+	} catch {
+		// sticker pool may not have started; ignore shutdown errors
+	}
 	Deno.exit(0)
 }
 Deno.addSignalListener('SIGINT', onExit)
