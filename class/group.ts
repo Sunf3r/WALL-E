@@ -61,8 +61,4 @@ export default class Group {
 
 		return dbMsgs || []
 	}
-
-	checkData() {
-		return this
-	}
 }

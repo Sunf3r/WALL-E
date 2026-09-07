@@ -41,8 +41,6 @@ export default abstract class Cmd {
 
 	abstract run(ctx: CmdCtx): Promise<any> // run function
 
-	async checkData() {}
-
 	checkPerms(msg: Msg, user: User, group?: Group) {
 		const send = sendMsg.bind(msg.chat)
 		const react = reactToMsg.bind(msg)
