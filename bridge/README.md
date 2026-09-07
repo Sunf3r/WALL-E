@@ -57,6 +57,7 @@ deno task start:dev   # or: pm2 start conf/ecosystem.config.cjs --attach
 - `/topics` — list active JID → topic mappings
 - `/archive` / `/close` — stop mirroring a topic (mapping kept)
 - `/reopen` — resume mirroring an archived topic
+- `/mute` / `/unmute` — freeze/resume relay in both directions for this topic (mapping kept)
 - `/new <phone> [name]` — verify a number on WhatsApp and bridge it into a fresh topic
 
 ## Known Limitations
@@ -76,6 +77,22 @@ deno task start:dev   # or: pm2 start conf/ecosystem.config.cjs --attach
   supergroup and polling must opt into `message_reaction` (done in `mod.ts` — Telegram excludes it
   from defaults). TG-initiated react echoes are deduplicated via a pending mark, so genuine
   reactions from your own phone still relay; WA reaction carriers never surface as `You: ❤️` text.
+- Deletes sync WA→TG (mirror is deleted, needs delete rights in the supergroup; old/gone mirrors
+  just log). TG→WA delete sync is impossible — the Bot API emits no event when a Telegram message is
+  deleted.
+- Albums: rapid WA photo/video bursts from one sender cross as a single Telegram media group (1.5s
+  batching window, so single photos arrive ~1.5s later; extra captions follow as text); TG albums
+  (`media_group_id`) forward in order over a 1.2s window (Baileys has no album-send, so WA receives
+  ordered singles).
+- Round video notes stay round both ways (`sendVideoNote` / `ptv`, plain-video fallback); GIFs cross
+  as GIFs (`sendAnimation` / `gifPlayback`). Telegram video stickers transcode to animated WebP via
+  ffmpeg (≤500KB, else video fallback); `.tgs` (Lottie) still relays as a document — ffmpeg can't
+  render it.
+- Relay failures post a short ⚠️ notice to the affected topic (failed downloads and sends); the
+  notice itself never throws or loops.
+- Polls stay a text fallback TG→WA and a native (non-anonymous) TG poll WA→TG. Live vote sync is
+  platform-blocked both ways: WA polls are immutable after creation and TG polls can't be edited
+  after sending (only stopped).
 - Group joins/leaves/admin changes post service lines; renames also rename the topic.
 - `General`-topic messages (no `message_thread_id`) are ignored except commands.
 - Captions over 1024 chars arrive as media + follow-up text message.

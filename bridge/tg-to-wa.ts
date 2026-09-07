@@ -62,6 +62,30 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 		}
 	})
 
+	// Per-chat mute: /mute stops relay in both directions for this topic
+	// (mapping kept, history untouched); /unmute resumes.
+	tg.command('mute', async (ctx) => {
+		const topicId = (ctx.msg as any)?.message_thread_id
+		if (!topicId) return
+		const mapping = db.getByTopicId(topicId)
+		if (mapping) {
+			db.setMuted(mapping.whatsapp_jid, true)
+			await ctx.reply(`Muted ${mapping.display_name} — nothing relays until /unmute.`)
+		}
+	})
+
+	tg.command('unmute', async (ctx) => {
+		const topicId = (ctx.msg as any)?.message_thread_id
+		if (!topicId) return
+		// Muted mappings are still returned by getByTopicId (only archived
+		// ones are filtered), so this resolves the same row /mute set.
+		const mapping = db.getByTopicId(topicId)
+		if (mapping) {
+			db.setMuted(mapping.whatsapp_jid, false)
+			await ctx.reply(`Unmuted ${mapping.display_name} — relay resumed.`)
+		}
+	})
+
 	// Start a bridged chat from the Telegram side: `/new <phone> [name]`.
 	// Verifies the number on WhatsApp, creates the forum topic + mapping —
 	// the first message written in that topic relays like any other.
@@ -127,6 +151,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 				)
 				return
 			}
+			if (db.getByJid(entry.wa_jid)?.muted) return
 			const key = restoreWaKey(entry)
 			if (!key) {
 				console.debug(
@@ -151,6 +176,88 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 		}
 	})
 
+	// Telegram album batching (TG→WA). Items of one media_group_id arrive as
+	// separate updates; they wait out TG_ALBUM_WINDOW_MS and forward in
+	// message_id order through the normal single-send path (Baileys has no
+	// album-send API, so batching buys ordering, not a WA album).
+	const TG_ALBUM_WINDOW_MS = 1200
+	interface TgAlbumItem {
+		msg: any
+		topicId: number
+		text: string
+		media: TgMedia
+	}
+	const pendingTgAlbums = new Map<
+		string,
+		{ items: TgAlbumItem[]; timer: ReturnType<typeof setTimeout> }
+	>()
+
+	function bufferTgAlbumItem(groupId: string, item: TgAlbumItem): void {
+		const existing = pendingTgAlbums.get(groupId)
+		if (existing) {
+			if (existing.items.length < 10) existing.items.push(item)
+			return
+		}
+		const timer = setTimeout(() => {
+			void flushTgAlbum(groupId).catch((e) =>
+				console.error('[BRIDGE] TG album flush failed:', e)
+			)
+		}, TG_ALBUM_WINDOW_MS)
+		pendingTgAlbums.set(groupId, { items: [item], timer })
+	}
+
+	async function flushTgAlbum(groupId: string): Promise<void> {
+		const entry = pendingTgAlbums.get(groupId)
+		if (!entry) return
+		pendingTgAlbums.delete(groupId)
+		clearTimeout(entry.timer)
+		const items = entry.items
+			.sort((a, b) => (a.msg.message_id || 0) - (b.msg.message_id || 0))
+			.slice(0, 10)
+		if (items.length === 0) return
+		const first = items[0]
+		const mapping = db.getByTopicId(first.topicId)
+		if (!mapping || mapping.archived || mapping.muted) return
+		const quoted = buildQuoted(first.msg, mapping.whatsapp_jid, db)
+		let attached = false
+		let notified = false
+		for (const it of items) {
+			try {
+				const waContent = await buildWaContent(it.text, it.media, it.msg)
+				if (!waContent) continue
+				const useQuoted = !attached ? quoted : null
+				await limiter.enqueue(async () => {
+					const sent = await bot.sock.sendMessage(
+						mapping.whatsapp_jid,
+						waContent,
+						useQuoted ? { quoted: useQuoted } : undefined,
+					)
+					if (sent?.key?.id) {
+						db.saveReplyMap(
+							it.msg.message_id,
+							mapping.whatsapp_jid,
+							sent.key.id,
+							JSON.stringify(sent.key),
+						)
+					}
+					db.updateLastActive(mapping.whatsapp_jid)
+				})
+				attached = true
+			} catch (e) {
+				console.error('[BRIDGE] TG→WA album item failed:', e)
+				if (!notified) {
+					notified = true
+					await notifyTopic(
+						tg,
+						limiter,
+						first.topicId,
+						`⚠️ Couldn't send part of a Telegram album: ${shortErr(e)}`,
+					)
+				}
+			}
+		}
+	}
+
 	tg.on('message', async (ctx) => {
 		try {
 			const msg: any = ctx.msg
@@ -163,16 +270,45 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 
 			const mapping = db.getByTopicId(topicId)
 			if (!mapping || mapping.archived) return
+			if (mapping.muted) {
+				console.debug(`[BRIDGE] skipping TG message: ${mapping.whatsapp_jid} muted`)
+				return
+			}
 
 			// Telegram entities → WhatsApp markers (*bold*, _italic_, …) so
 			// formatting survives the crossing in both text and captions.
 			const rawText = msg.text || msg.caption || ''
 			const text = tgEntitiesToWa(rawText, msg.entities || msg.caption_entities).trim()
 			const media = await downloadTgMedia(tg, msg)
-			if (!text && !media && !msg.location && !msg.contact && !msg.poll) return
+			if (
+				!text && !media && !msg.location && !msg.contact && !msg.poll && !msg.video_note &&
+				!msg.animation
+			) {
+				return
+			}
+			// A media node whose download failed would otherwise vanish
+			// silently — tell the topic instead of dropping it.
+			if (!media && hasTgMediaNode(msg)) {
+				await notifyTopic(
+					tg,
+					limiter,
+					topicId,
+					`⚠️ Couldn't download a Telegram attachment — it didn't cross.`,
+				)
+				if (!text) return
+			}
+
+			// Telegram album items arrive as separate updates sharing a
+			// media_group_id — collect them over a short window and forward
+			// in order (Baileys has no album-send, so this buys ordering).
+			const groupId = msg.media_group_id as string | undefined
+			if (groupId && media && (media.kind === 'image' || media.kind === 'video')) {
+				bufferTgAlbumItem(groupId, { msg, topicId, text, media })
+				return
+			}
 
 			const quoted = buildQuoted(msg, mapping.whatsapp_jid, db)
-			const waContent = buildWaContent(text, media, msg)
+			const waContent = await buildWaContent(text, media, msg)
 			if (!waContent) return
 
 			await limiter.enqueue(async () => {
@@ -196,6 +332,15 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			})
 		} catch (e) {
 			console.error('[BRIDGE] TG→WA relay failed:', e)
+			const topicId = (ctx.msg as any)?.message_thread_id
+			if (topicId) {
+				await notifyTopic(
+					tg,
+					limiter,
+					topicId,
+					`⚠️ Couldn't send to WhatsApp: ${shortErr(e)}`,
+				)
+			}
 		}
 	})
 
@@ -214,6 +359,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 
 			const mapping = db.getByTopicId(topicId)
 			if (!mapping || mapping.archived) return
+			if (mapping.muted) return
 
 			const rawText = msg.text || msg.caption || ''
 			const text = tgEntitiesToWa(rawText, msg.entities || msg.caption_entities).trim()
@@ -238,11 +384,11 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 	})
 }
 
-function buildWaContent(
+export async function buildWaContent(
 	text: string,
 	media: { kind: string; buffer: Uint8Array; fileName?: string; mime?: string } | null,
 	msg: any,
-): any {
+): Promise<any> {
 	if (msg.location) {
 		const { latitude, longitude } = msg.location
 		return {
@@ -274,15 +420,32 @@ function buildWaContent(
 			return { image: buf, caption: text || undefined }
 		case 'video':
 			return { video: buf, caption: text || undefined, mimetype: media.mime || 'video/mp4' }
+		case 'video_note':
+			// Round video messages: Baileys turns { video, ptv: true } into a
+			// ptvMessage the WA clients render as a round bubble.
+			return { video: buf, ptv: true, mimetype: 'video/mp4' }
+		case 'gif':
+			// Telegram animations are GIFs; gifPlayback renders them as such
+			// on WhatsApp (ignored by clients that don't know the flag, in
+			// which case it just plays as video — same as before).
+			return {
+				video: buf,
+				gifPlayback: true,
+				caption: text || undefined,
+				mimetype: media.mime || 'video/mp4',
+			}
 		case 'voice':
 			return { audio: buf, ptt: true, mimetype: 'audio/ogg; codecs=opus' }
 		case 'audio':
 			return { audio: buf, mimetype: media.mime || 'audio/mpeg' }
 		case 'sticker':
-			// WhatsApp stickers must be WebP. Telegram video (.webm) and
-			// animated (.tgs) stickers are not — relay those as video/document
-			// so they still arrive instead of failing or showing blank.
+			// WhatsApp stickers must be WebP. Telegram animated (.tgs, Lottie)
+			// stickers can't be rendered by ffmpeg, so they still relay as a
+			// document. Video (.webm) stickers are transcoded to animated
+			// WebP first, falling back to video when conversion fails.
 			if (media.mime === 'video/webm' || (media.fileName || '').endsWith('.webm')) {
+				const webp = await convertWebmToStickerWebp(media.buffer).catch(() => null)
+				if (webp) return { sticker: Buffer.from(webp) }
 				return { video: buf, caption: text || undefined }
 			}
 			if (media.mime?.includes('tgs') || (media.fileName || '').endsWith('.tgs')) {
@@ -301,6 +464,58 @@ function buildWaContent(
 				mimetype: media.mime || 'application/octet-stream',
 				caption: text || undefined,
 			}
+	}
+}
+
+// Transcode a Telegram video (.webm) sticker to an animated WebP WhatsApp
+// sticker (512px, looping, ≤500KB). Async ffmpeg — never blocks the event
+// loop. Returns null on any failure (no ffmpeg, undecodable input, still
+// oversize after two quality levels) so the caller can fall back to video.
+export async function convertWebmToStickerWebp(input: Uint8Array): Promise<Uint8Array | null> {
+	const dir = await Deno.makeTempDir({ prefix: 'bridge-sticker-' })
+	try {
+		const inPath = `${dir}/in.webm`
+		await Deno.writeFile(inPath, input)
+		for (const [quality, fps] of [[60, 15], [25, 10]] as const) {
+			const outPath = `${dir}/out_${quality}.webp`
+			const proc = new Deno.Command('ffmpeg', {
+				args: [
+					'-y',
+					'-t',
+					'11',
+					'-i',
+					inPath,
+					'-filter_complex',
+					`[0:v]fps=${fps},scale=512:512:force_original_aspect_ratio=decrease,format=yuva420p,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000[out]`,
+					'-map',
+					'[out]',
+					'-c:v',
+					'libwebp',
+					'-loop',
+					'0',
+					'-an',
+					'-quality',
+					String(quality),
+					'-compression_level',
+					'4',
+					'-preset',
+					'icon',
+					outPath,
+				],
+				stdin: 'null',
+				stdout: 'null',
+				stderr: 'null',
+			})
+			const { success } = await proc.output()
+			if (!success) continue
+			const out = await Deno.readFile(outPath).catch((): Uint8Array | null => null)
+			if (out && out.length > 0 && out.length <= 500 * 1024) return out
+		}
+		return null
+	} catch {
+		return null
+	} finally {
+		await Deno.remove(dir, { recursive: true }).catch(() => {})
 	}
 }
 
@@ -364,7 +579,7 @@ function buildQuoted(msg: any, waJid: string, db: BridgeDB): any {
 }
 
 interface TgMedia {
-	kind: 'image' | 'video' | 'voice' | 'audio' | 'sticker' | 'document'
+	kind: 'image' | 'video' | 'video_note' | 'gif' | 'voice' | 'audio' | 'sticker' | 'document'
 	buffer: Uint8Array
 	fileName?: string
 	mime?: string
@@ -403,10 +618,10 @@ async function downloadTgMedia(tg: Bot, msg: any): Promise<TgMedia | null> {
 			mime = msg.video.mime_type
 		} else if (msg.video_note) {
 			fileId = fileIdOf(msg.video_note)
-			kind = 'video'
+			kind = 'video_note'
 		} else if (msg.animation) {
 			fileId = fileIdOf(msg.animation)
-			kind = 'video'
+			kind = 'gif'
 			fileName = msg.animation.file_name
 			mime = msg.animation.mime_type
 		} else if (msg.voice) {
@@ -439,6 +654,52 @@ function fileIdOf(f: any): string | null {
 	if (typeof f === 'string') return f
 	if (typeof f.file_id === 'string') return f.file_id
 	return null
+}
+
+// True when the Telegram message carries an attachment node (so a null
+// download means failure, not "no media"). Mirrors downloadTgMedia's detection.
+function hasTgMediaNode(msg: any): boolean {
+	if (!msg || typeof msg !== 'object') return false
+	return !!(
+		msg.sticker ||
+		msg.photo?.length ||
+		msg.video ||
+		msg.video_note ||
+		msg.animation ||
+		msg.voice ||
+		msg.audio ||
+		msg.document
+	)
+}
+
+// Best-effort ⚠️ notice to the affected topic so a relay failure is visible
+// where the user looks, not just in server logs. Never throws and never
+// loops (the message handler ignores the bot's own messages).
+async function notifyTopic(
+	tg: Bot,
+	limiter: RateLimiter,
+	topicId: number,
+	line: string,
+): Promise<void> {
+	try {
+		await limiter.enqueue(() =>
+			tg.api.sendMessage(String(Deno.env.get('TELEGRAM_SUPERGROUP_ID')), line, {
+				message_thread_id: topicId,
+			})
+		)
+	} catch {
+		// The notice itself failed — the server log already has the details.
+	}
+}
+
+// First line of an error, capped — for topic notices, not logs.
+function shortErr(e: unknown): string {
+	const raw = typeof e === 'string'
+		? e
+		: ((e as { description?: unknown; message?: unknown })?.description ??
+			(e as { message?: unknown })?.message ??
+			String(e))
+	return String(raw).split('\n')[0].slice(0, 160) || 'unknown error'
 }
 
 async function downloadTgFile(tg: Bot, fileId: string): Promise<Uint8Array | null> {

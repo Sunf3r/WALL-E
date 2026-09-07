@@ -9,6 +9,8 @@ export interface MappingRow {
 	created_at: number
 	last_active_at: number
 	archived: boolean
+	// Per-chat mute (/mute): relay skips the chat in both directions.
+	muted: boolean
 }
 
 export interface ReplyMapRow {
@@ -37,6 +39,7 @@ function toMapping(row: Record<string, unknown>): MappingRow {
 		created_at: row.created_at as number,
 		last_active_at: row.last_active_at as number,
 		archived: Boolean(row.archived),
+		muted: Boolean(row.muted ?? 0),
 	}
 }
 
@@ -89,6 +92,11 @@ export class BridgeDB {
 		if (!cols.some((c) => c.name === 'tg_kind')) {
 			this.db.exec(`ALTER TABLE reply_map ADD COLUMN tg_kind TEXT NOT NULL DEFAULT 'unknown'`)
 		}
+		// Per-chat mute flag. Same safe-ADD pattern for existing DBs.
+		const mapCols = this.db.prepare(`PRAGMA table_info(mappings)`).all() as { name: string }[]
+		if (!mapCols.some((c) => c.name === 'muted')) {
+			this.db.exec(`ALTER TABLE mappings ADD COLUMN muted INTEGER NOT NULL DEFAULT 0`)
+		}
 	}
 
 	close(): void {
@@ -122,6 +130,7 @@ export class BridgeDB {
 			created_at: Date.now(),
 			last_active_at: Date.now(),
 			archived: false,
+			muted: false,
 		}
 
 		this.db
@@ -175,6 +184,19 @@ export class BridgeDB {
 
 	unarchive(jid: string): void {
 		this.db.prepare('UPDATE mappings SET archived = 0 WHERE whatsapp_jid = ?').run(jid)
+	}
+
+	setMuted(jid: string, muted: boolean): void {
+		this.db.prepare('UPDATE mappings SET muted = ? WHERE whatsapp_jid = ?').run(
+			muted ? 1 : 0,
+			jid,
+		)
+	}
+
+	// Drop a reply_map row (used after a successful delete sync so later
+	// edits/reactions targeting the deleted message don't 400).
+	deleteReplyMap(tgMsgId: number): void {
+		this.db.prepare('DELETE FROM reply_map WHERE tg_msg_id = ?').run(tgMsgId)
 	}
 
 	delete(jid: string): void {

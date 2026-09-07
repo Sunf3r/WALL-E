@@ -68,6 +68,16 @@ export function attachWaRelay(tgBot: Bot, bridgeDb: BridgeDB, rateLimiter: RateL
 			console.error('[BRIDGE] WA→TG group event failed:', e)
 		}
 	})
+	// Deletes/revokes → delete the Telegram mirror (WA→TG only; the Bot API
+	// emits no event when a Telegram message is deleted, so TG→WA delete
+	// sync is impossible — see README).
+	bot.sock.ev.on('messages.delete', async (payload: any) => {
+		try {
+			await handleWaDeletes(payload)
+		} catch (e) {
+			console.error('[BRIDGE] WA→TG delete handler failed:', e)
+		}
+	})
 	bot.sock.ev.on('groups.update', async (updates: Partial<{ id: string; subject: string }>[]) => {
 		try {
 			await handleGroupUpdates(updates)
@@ -82,6 +92,7 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 	if (!db || !limiter || !tg) return
 
 	for (const m of messages) {
+		let topicId: number | null = null
 		try {
 			if (!m?.message || !m.key) continue
 			// Skip protocol traffic (deletes, history sync, …) and reaction
@@ -111,9 +122,9 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 
 			let mapping = db.getByJid(jid)
 			if (!mapping || mapping.archived) {
-				const topicId = await createForumTopic(displayName, isGroup)
-				mapping = db.getOrCreate(jid, topicId, displayName, chatType)
-				console.log(`[BRIDGE] new topic #${topicId} for ${jid} (${displayName})`)
+				const freshTopicId = await createForumTopic(displayName, isGroup)
+				mapping = db.getOrCreate(jid, freshTopicId, displayName, chatType)
+				console.log(`[BRIDGE] new topic #${freshTopicId} for ${jid} (${displayName})`)
 			} else {
 				if (mapping.display_name !== displayName) {
 					mapping = db.getOrCreate(jid, mapping.telegram_topic_id, displayName, chatType)
@@ -121,7 +132,14 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 					db.updateLastActive(jid)
 				}
 			}
-			const topicId = mapping.telegram_topic_id
+			if (mapping.muted) {
+				console.debug(`[BRIDGE] skipping WA message: ${jid} muted`)
+				continue
+			}
+			topicId = mapping.telegram_topic_id
+			// Local number-typed alias: the outer topicId stays nullable for
+			// the catch-block notify, but everything below needs a number.
+			const tid: number = topicId
 
 			let text = getMsgText(m.message)
 			const media = await downloadWaMedia(m)
@@ -138,7 +156,17 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				special = null
 			}
 
-			if (!text && !media && !special) continue
+			if (!text && !media && !special) {
+				// A media node whose download failed would otherwise vanish
+				// silently — tell the topic instead of dropping it.
+				if (hasDownloadableMedia(m) && topicId !== null) {
+					await notifyTopic(
+						topicId,
+						`⚠️ Couldn't download a WhatsApp attachment — it didn't cross.`,
+					)
+				}
+				continue
+			}
 
 			// WhatsApp quote → Telegram reply. Resolve the quoted stanzaId to
 			// the Telegram message mirroring the original; when the original
@@ -169,15 +197,186 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				...e,
 				offset: e.offset + prefix.length,
 			}))
-			await limiter.enqueue(() =>
-				sendToTopic(topicId, body, entities, media, special, jid, m, {
-					tgId: replyToTgId,
-					header: stickerFallback ? quoteHeader : null,
+			if (isAlbumEligible(media, special, body)) {
+				// Photos/videos wait out the album window so rapid bursts
+				// cross as one Telegram media group instead of N singles.
+				bufferAlbumItem(jid, m, {
+					m,
+					topicId: tid,
+					body,
+					entities,
+					media,
+					replyToTgId,
 				})
-			)
+			} else {
+				// Anything else flushes pending albums first so chat order
+				// is preserved, then sends immediately as before.
+				await flushPendingAlbums(jid)
+				await limiter.enqueue(() =>
+					sendToTopic(tid, body, entities, media, special, jid, m, {
+						tgId: replyToTgId,
+						header: stickerFallback ? quoteHeader : null,
+					})
+				)
+			}
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA message:', e)
+			if (topicId !== null) {
+				await notifyTopic(topicId, `⚠️ Couldn't relay a WhatsApp message: ${shortErr(e)}`)
+			}
 		}
+	}
+}
+
+// Media album batching (WA→TG). Consecutive photos/videos from the same
+// sender in one chat cross as a single Telegram media group instead of N
+// disconnected messages. Every eligible message waits out ALBUM_WINDOW_MS;
+// any other message in the chat flushes the pending group first so order
+// is preserved. Singletons fall back to the normal sendToTopic path.
+const ALBUM_WINDOW_MS = 1500
+
+interface AlbumItem {
+	m: proto.IWebMessageInfo
+	topicId: number
+	body: string
+	entities: TgEntity[]
+	media: { kind: string; buffer: Uint8Array; mime?: string; fileName?: string; ptt?: boolean }
+	replyToTgId: number | null
+}
+
+const pendingAlbums = new Map<
+	string,
+	{ items: AlbumItem[]; timer: ReturnType<typeof setTimeout> }
+>()
+
+function albumKey(jid: string, m: proto.IWebMessageInfo): string {
+	const sender = m.key?.fromMe ? 'me' : (m.key?.participant || m.pushName || 'other')
+	return `${jid}\n${sender}`
+}
+
+export function isAlbumEligible(
+	media:
+		| { kind: string; buffer: Uint8Array; mime?: string; fileName?: string; ptt?: boolean }
+		| null,
+	special: WaSpecial | null,
+	body: string,
+): media is AlbumItem['media'] {
+	return !!media &&
+		(media.kind === 'image' || media.kind === 'video' || media.kind === 'gif') &&
+		!special && body.length <= 1024
+}
+
+function bufferAlbumItem(jid: string, m: proto.IWebMessageInfo, item: AlbumItem): void {
+	const key = albumKey(jid, m)
+	const existing = pendingAlbums.get(key)
+	if (existing) {
+		existing.items.push(item)
+		return
+	}
+	const timer = setTimeout(() => {
+		void flushAlbum(key).catch((e) => console.error('[BRIDGE] album flush failed:', e))
+	}, ALBUM_WINDOW_MS)
+	pendingAlbums.set(key, { items: [item], timer })
+}
+
+// Flush every pending album group of a chat (called before a non-eligible
+// message sends, preserving chat order).
+async function flushPendingAlbums(jid: string): Promise<void> {
+	const keys = [...pendingAlbums.keys()].filter((k) => k.startsWith(`${jid}\n`))
+	for (const key of keys) await flushAlbum(key)
+}
+
+async function flushAlbum(key: string): Promise<void> {
+	const entry = pendingAlbums.get(key)
+	if (!entry) return
+	pendingAlbums.delete(key)
+	clearTimeout(entry.timer)
+	const { items } = entry
+	if (items.length === 0 || !db || !limiter || !tg) return
+	const jid = key.split('\n')[0]
+	const mapping = db.getByJid(jid)
+	if (!mapping || mapping.archived || mapping.muted) return
+
+	if (items.length === 1) {
+		const it = items[0]
+		await limiter.enqueue(() =>
+			sendToTopic(it.topicId, it.body, it.entities, it.media, null, jid, it.m, {
+				tgId: it.replyToTgId,
+				header: null,
+			})
+		).catch((e) => console.error('[BRIDGE] failed to relay album singleton:', e))
+		return
+	}
+
+	// Telegram caps media groups at 10 — chunk larger bursts.
+	for (let c = 0; c < items.length; c += 10) {
+		const chunk = items.slice(c, c + 10)
+		const first = chunk[0]
+		await limiter.enqueue(async () => {
+			try {
+				const inputMedia = chunk.map((it, i) => {
+					const file = new InputFile(
+						it.media.buffer,
+						it.media.fileName || `file.${extOf(it.media)}`,
+					)
+					const captioned: Record<string, unknown> = i === 0 && first.body
+						? { caption: first.body.slice(0, 1024) }
+						: {}
+					if (i === 0 && first.body && first.entities.length > 0) {
+						captioned.caption_entities = first.entities
+					}
+					// GIFs ride as plain videos inside media groups (the Bot
+					// API has no animation group item).
+					return it.media.kind === 'image'
+						? { type: 'photo', media: file, ...captioned }
+						: { type: 'video', media: file, ...captioned }
+				})
+				const reply = first.replyToTgId
+					? {
+						reply_parameters: {
+							message_id: first.replyToTgId,
+							allow_sending_without_reply: true,
+						},
+					}
+					: undefined
+				const sentArr = await tg!.api.sendMediaGroup(supergroupId, inputMedia as any, {
+					message_thread_id: first.topicId,
+					...reply,
+				}) as { message_id: number }[]
+				sentArr.forEach((s, i) => {
+					const it = chunk[i]
+					if (s && it) {
+						db!.saveReplyMap(
+							s.message_id,
+							jid,
+							it.m.key?.id || '',
+							JSON.stringify(it.m.key || {}),
+							'media',
+						)
+					}
+				})
+				// Captions beyond the first don't fit in a media group —
+				// deliver them as one follow-up instead of dropping them.
+				const extras = chunk.slice(1).map((it) => it.body).filter((b) => b)
+				if (extras.length > 0) {
+					const followBody = extras.join('\n')
+					const sent = await tg!.api.sendMessage(supergroupId, followBody, {
+						message_thread_id: first.topicId,
+					})
+					const last = chunk[chunk.length - 1]
+					db!.saveReplyMap(
+						sent.message_id,
+						jid,
+						last.m.key?.id || '',
+						JSON.stringify(last.m.key || {}),
+						'text',
+					)
+				}
+			} catch (e) {
+				console.error('[BRIDGE] failed to relay album group:', e)
+				await notifyTopic(first.topicId, `⚠️ Couldn't relay a photo group: ${shortErr(e)}`)
+			}
+		})
 	}
 }
 
@@ -211,6 +410,50 @@ function phoneOf(jid: string | undefined | null): string {
 	return user ? `+${user}` : ''
 }
 
+// Best-effort ⚠️ notice to the affected topic so a relay failure is visible
+// where the user looks, not just in server logs. Never throws and never
+// loops: it sends via tg.api directly, and the TG→WA side ignores the bot's
+// own messages.
+async function notifyTopic(topicId: number, line: string): Promise<void> {
+	if (!tg || !limiter) return
+	try {
+		await limiter.enqueue(() =>
+			tg!.api.sendMessage(supergroupId, line, { message_thread_id: topicId })
+		)
+	} catch {
+		// The notice itself failed — the server log already has the details.
+	}
+}
+
+// First line of an error, capped — for topic notices, not logs.
+function shortErr(e: unknown): string {
+	const raw = typeof e === 'string'
+		? e
+		: ((e as { description?: unknown; message?: unknown })?.description ??
+			(e as { message?: unknown })?.message ??
+			String(e))
+	return String(raw).split('\n')[0].slice(0, 160) || 'unknown error'
+}
+
+// True when the WA message carries a media node (so a null download means
+// failure, not "no media"). Mirrors downloadWaMedia's node detection.
+function hasDownloadableMedia(m: proto.IWebMessageInfo): boolean {
+	try {
+		const raw = unwrap(m.message)
+		if (!raw || typeof raw !== 'object') return false
+		return !!(
+			raw.imageMessage ||
+			raw.videoMessage ||
+			raw.ptvMessage ||
+			raw.audioMessage ||
+			raw.stickerMessage ||
+			raw.documentMessage
+		)
+	} catch {
+		return false
+	}
+}
+
 // WhatsApp reaction → Telegram reaction. Each side mirrors through a single
 // bot identity (bots get one reaction per message on Telegram, one react per
 // key on WhatsApp), so concurrent reactors are last-writer-wins by design.
@@ -225,7 +468,7 @@ async function handleWaReactions(
 			const jid = key?.remoteJid
 			if (!targetId || !jid || jid === 'status@broadcast') continue
 			const mapping = db.getByJid(jid)
-			if (!mapping || mapping.archived) continue
+			if (!mapping || mapping.archived || mapping.muted) continue
 			// Unmapped targets (pre-bridge history, pruned) can't be quoted
 			// by Telegram — nothing to attach the reaction to.
 			const target = db.getByWaMsgId(targetId, jid)
@@ -289,6 +532,62 @@ async function handleWaReactions(
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA reaction:', e)
 		}
+	}
+}
+
+// WhatsApp delete/revoke → delete the Telegram mirror. Deletes arrive as
+// `messages.delete` with `{ keys }` (per-message revoke) or `{ jid, all }`
+// (clear-chat, which has no meaningful topic equivalent and is skipped).
+// Needs the bot to be supergroup admin with delete rights; messages older
+// than ~48h or already gone just debug-log. The reply_map row is dropped on
+// success so later edits/reactions to the deleted message don't 400.
+async function handleWaDeletes(
+	payload: { keys?: proto.IMessageKey[]; jid?: string; all?: boolean },
+): Promise<void> {
+	if (!db || !limiter || !tg) return
+	if (!payload?.keys || payload.keys.length === 0) {
+		console.debug('[BRIDGE] skipping WA delete: no keys (clear-chat or empty)')
+		return
+	}
+	for (const key of payload.keys) {
+		try {
+			const id = key?.id
+			const jid = key?.remoteJid
+			if (!id || !jid || jid === 'status@broadcast') continue
+			const mapping = db.getByJid(jid)
+			if (!mapping || mapping.archived || mapping.muted) continue
+			const target = db.getByWaMsgId(id, jid)
+			if (!target) {
+				console.debug(`[BRIDGE] skipping WA delete: target ${id} not in reply_map`)
+				continue
+			}
+			await limiter.enqueue(async () => {
+				try {
+					await tg!.api.deleteMessage(supergroupId, target.tg_msg_id)
+					db!.deleteReplyMap(target.tg_msg_id)
+					console.debug(`[BRIDGE] WA→TG delete of TG msg ${target.tg_msg_id}`)
+				} catch (e) {
+					logDeleteFailure(target.tg_msg_id, e)
+				}
+			})
+		} catch (e) {
+			console.error('[BRIDGE] failed to relay one WA delete:', e)
+		}
+	}
+}
+
+function logDeleteFailure(tgMsgId: number, err: unknown): void {
+	const desc = reactionErrorDescription(err).toLowerCase()
+	const line = `[BRIDGE] delete of TG message ${tgMsgId} failed: ${reactionErrorDescription(err)}`
+	// Gone/expired mirrors and missing admin rights are environmental, not bugs.
+	if (
+		desc.includes('not found') || desc.includes("can't be deleted") || desc.includes('too old')
+	) {
+		console.debug(line)
+	} else if (desc.includes('right') || desc.includes('admin') || desc.includes('forbidden')) {
+		console.warn(`${line} (bot needs delete rights in the supergroup)`)
+	} else {
+		console.error(line)
 	}
 }
 
@@ -403,6 +702,29 @@ async function sendToTopic(
 		? { caption_entities: entities }
 		: undefined
 	const file = new InputFile(media.buffer, media.fileName || `file.${extOf(media)}`)
+
+	// Round video notes take no caption and need their own endpoint — a
+	// non-round-compatible file falls back to a plain video instead.
+	if (media.kind === 'round') {
+		let sentNote: { message_id: number }
+		try {
+			sentNote = await tg.api.sendVideoNote(supergroupId, file, { ...thread, ...reply })
+		} catch {
+			sentNote = await tg.api.sendVideo(supergroupId, file, {
+				...thread,
+				caption,
+				...captionEntities,
+				...reply,
+			})
+		}
+		save(sentNote.message_id, 'media')
+		if (body) {
+			const sent = await tg.api.sendMessage(supergroupId, body, { ...thread, ...rich })
+			save(sent.message_id, 'text')
+		}
+		return
+	}
+
 	let sent: { message_id: number }
 
 	switch (media.kind) {
@@ -415,12 +737,22 @@ async function sendToTopic(
 			})
 			break
 		case 'video':
-			sent = await tg.api.sendVideo(supergroupId, file, {
-				...thread,
-				caption,
-				...captionEntities,
-				...reply,
-			})
+		case 'gif':
+			// WA GIFs are mp4 videos with gifPlayback — Telegram renders them
+			// as GIFs (looping, muted) via sendAnimation instead of sendVideo.
+			sent = media.kind === 'gif'
+				? await tg.api.sendAnimation(supergroupId, file, {
+					...thread,
+					caption,
+					...captionEntities,
+					...reply,
+				})
+				: await tg.api.sendVideo(supergroupId, file, {
+					...thread,
+					caption,
+					...captionEntities,
+					...reply,
+				})
 			break
 		case 'voice':
 			sent = await tg.api.sendVoice(supergroupId, file, {
@@ -595,7 +927,7 @@ async function handleWaEdits(
 				continue
 			}
 			const mapping = db.getByJid(jid)
-			if (!mapping || mapping.archived) continue
+			if (!mapping || mapping.archived || mapping.muted) continue
 			const target = db.getByWaMsgId(id, jid)
 			if (!target) continue
 
@@ -705,7 +1037,7 @@ async function handleGroupParticipants(upd: {
 	if (!db || !limiter || !tg) return
 	try {
 		const mapping = db?.getByJid(upd.id)
-		if (!mapping || mapping.archived) return
+		if (!mapping || mapping.archived || mapping.muted) return
 		const names = (upd.participants || [])
 			.map((p) => phoneOf(typeof p === 'string' ? p : p?.id) || 'someone')
 			.join(', ')
@@ -745,7 +1077,7 @@ async function handleGroupUpdates(
 		try {
 			if (!u?.id || !u.subject) continue
 			const mapping = db.getByJid(u.id)
-			if (!mapping || mapping.archived) continue
+			if (!mapping || mapping.archived || mapping.muted) continue
 			if (mapping.display_name === u.subject) continue
 			groupNameCache.set(u.id, u.subject)
 			db.getOrCreate(u.id, mapping.telegram_topic_id, u.subject, mapping.chat_type)
@@ -770,6 +1102,8 @@ function extOf(media: { kind: string; mime?: string }): string {
 		case 'image':
 			return 'jpg'
 		case 'video':
+		case 'round':
+		case 'gif':
 			return 'mp4'
 		case 'voice':
 		case 'audio':
@@ -844,7 +1178,7 @@ function describeQuoted(quotedMessage: any): string {
 }
 
 interface WaMedia {
-	kind: 'image' | 'video' | 'voice' | 'audio' | 'sticker' | 'document'
+	kind: 'image' | 'video' | 'round' | 'gif' | 'voice' | 'audio' | 'sticker' | 'document'
 	buffer: Uint8Array
 	mime?: string
 	fileName?: string
@@ -861,8 +1195,13 @@ async function downloadWaMedia(m: proto.IWebMessageInfo): Promise<WaMedia | null
 		if (raw.imageMessage) {
 			kind = 'image'
 			node = raw.imageMessage
+		} else if (raw.ptvMessage) {
+			// Round video-note messages arrive as ptvMessage, not videoMessage.
+			kind = 'round'
+			node = raw.ptvMessage
 		} else if (raw.videoMessage) {
-			kind = 'video'
+			// GIFs are videoMessages with the gifPlayback flag.
+			kind = raw.videoMessage.gifPlayback ? 'gif' : 'video'
 			node = raw.videoMessage
 		} else if (raw.audioMessage) {
 			kind = raw.audioMessage.ptt ? 'voice' : 'audio'
