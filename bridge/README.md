@@ -74,11 +74,12 @@ deno task start:dev   # or: pm2 start conf/ecosystem.config.cjs --attach
   non-phone JIDs pass through unannotated). Applies to new messages and WA-side edits.
 - Reactions are last-writer-wins per message (single bot identity on each side); common WhatsApp
   reactions missing on Telegram (😂→🤣, …) are mapped, anything Telegram rejects (REACTION_INVALID)
-  is skipped with a one-time warn; custom-emoji and paid TG reactions fall back to ❤️ on WhatsApp.
-  Two prerequisites, both silent when missing: the bot must be an **administrator** of the
-  supergroup and polling must opt into `message_reaction` (done in `mod.ts` — Telegram excludes it
-  from defaults). TG-initiated react echoes are deduplicated via a pending mark, so genuine
-  reactions from your own phone still relay; WA reaction carriers never surface as `You: ❤️` text.
+  falls back to a default ❤️ (with a one-time warn); custom-emoji and paid TG reactions fall back to
+  ❤️ on WhatsApp. Two prerequisites, both silent when missing: the bot must be an **administrator**
+  of the supergroup and polling must opt into `message_reaction` (done in `mod.ts` — Telegram
+  excludes it from defaults). TG-initiated react echoes are deduplicated via a pending mark, so
+  genuine reactions from your own phone still relay; WA reaction carriers never surface as `You: ❤️`
+  text.
 - Deletes sync WA→TG as a spoiler tombstone: the mirror is re-edited to `🗑️ Deleted on
   WhatsApp`
   plus the original content hidden behind a spoiler (text in place, media via caption; repeat

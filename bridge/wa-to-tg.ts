@@ -514,24 +514,37 @@ async function handleWaReactions(
 				} catch (e) {
 					// REACTION_INVALID = the emoji isn't usable here (not a
 					// Telegram reaction at all, or disabled in this chat's
-					// Settings → Reactions). Warn once per emoji with the
-					// fix hint; later occurrences are debug noise. Never
-					// rethrows — reactions must not spam the limiter log.
+					// Settings → Reactions). Retry once with the default
+					// reaction so the sentiment still lands in the topic
+					// instead of being silently dropped. A failing default
+					// (reactions fully disabled?) gives up quietly — no
+					// recursion. Never rethrows — reactions must not spam
+					// the limiter log.
 					const desc = reactionErrorDescription(e)
-					if (desc.includes('REACTION_INVALID')) {
-						if (warnedReactions.has(emoji || '')) {
+					if (desc.includes('REACTION_INVALID') && emoji) {
+						try {
+							await tg!.api.setMessageReaction(supergroupId, target.tg_msg_id, [
+								{ type: 'emoji', emoji: DEFAULT_TG_REACTION },
+							] as any)
 							console.debug(
-								`[BRIDGE] skipping unsupported reaction ${
-									emoji || '(removal)'
-								} (known)`,
+								`[BRIDGE] WA→TG reaction ${emoji} unsupported, used default ${DEFAULT_TG_REACTION} on TG msg ${target.tg_msg_id}`,
+							)
+						} catch (e2) {
+							console.debug(
+								`[BRIDGE] default reaction ${DEFAULT_TG_REACTION} also rejected on TG msg ${target.tg_msg_id}: ${
+									reactionErrorDescription(e2)
+								}`,
+							)
+						}
+						if (warnedReactions.has(emoji)) {
+							console.debug(
+								`[BRIDGE] unsupported reaction ${emoji} (known, defaulted)`,
 							)
 						} else {
-							warnedReactions.add(emoji || '')
+							warnedReactions.add(emoji)
 							console.warn(
-								`[BRIDGE] reaction ${
-									emoji || '(removal)'
-								} rejected by Telegram (REACTION_INVALID): ` +
-									`not a Telegram reaction emoji or disabled in this supergroup's Settings → Reactions. Skipping.`,
+								`[BRIDGE] reaction ${emoji} rejected by Telegram (REACTION_INVALID): ` +
+									`not a Telegram reaction emoji or disabled in this supergroup's Settings → Reactions. Used default ${DEFAULT_TG_REACTION} instead.`,
 							)
 						}
 						return
@@ -701,6 +714,12 @@ function logDeleteFailure(tgMsgId: number, err: unknown): void {
 
 // Emojis already warned about (REACTION_INVALID) so repeats stay at debug.
 const warnedReactions = new Set<string>()
+
+// Default Telegram reaction set when an incoming WhatsApp reaction emoji is
+// rejected (REACTION_INVALID — unknown to Telegram or disabled in the
+// supergroup's Settings → Reactions). Plain ❤ without VS16, always in
+// Telegram's allowed set; mirrors the TG→WA custom-emoji fallback.
+const DEFAULT_TG_REACTION = '❤'
 
 function reactionErrorDescription(err: unknown): string {
 	if (typeof err === 'string') return err
