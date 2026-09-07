@@ -33,11 +33,6 @@ export const msgs = pgTable(
 	},
 )
 
-export const authStorage = pgTable('authStorage', {
-	key: varchar('key').primaryKey(),
-	data: json('data').notNull(),
-})
-
 export const authCreds = pgTable('authCreds', {
 	session: varchar('session').primaryKey(),
 	data: json('data').notNull(),
