@@ -5,7 +5,6 @@
  * When all workers are busy, incoming jobs are queued (FIFO).
  * Crashed workers are automatically respawned.
  */
-// removed node:worker_threads
 import type {
 	StickerFormat,
 	StickerResult,
