@@ -43,6 +43,13 @@ export async function findSupergroupId(): Promise<void> {
 // Starts the Telegram side and hooks the WA→TG relay onto the shared socket.
 // Returns null (instead of throwing) when not configured, so the WhatsApp
 // bot always boots even if the bridge env is missing.
+let activeBridge: { tg: Bot; db: BridgeDB; limiter: RateLimiter } | null = null
+
+export function reattachBridge(): void {
+	if (!activeBridge) return
+	attachWaRelay(activeBridge.tg, activeBridge.db, activeBridge.limiter)
+}
+
 export function startBridge(): Bot | null {
 	const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
 	const supergroupId = Deno.env.get('TELEGRAM_SUPERGROUP_ID')
@@ -56,12 +63,14 @@ export function startBridge(): Bot | null {
 
 	const db = new BridgeDB('conf/gen/bridge.db')
 	db.init()
-	const limiter = new RateLimiter(Number(Deno.env.get('RATE_LIMIT_MS') || 1000))
+	const parsedMs = Number(Deno.env.get('RATE_LIMIT_MS') || 1000)
+	const limiter = new RateLimiter(Number.isFinite(parsedMs) && parsedMs >= 200 ? parsedMs : 1000)
 
 	const tg = new Bot(token)
 	registerTgHandlers(tg, db, limiter)
 	// The WA socket is already connected by wa.ts at this point.
 	attachWaRelay(tg, db, limiter)
+	activeBridge = { tg, db, limiter }
 
 	tg.catch((e) => console.error('[BRIDGE] Telegram handler error:', e))
 	// Fire-and-forget: bot.start() long-polls until stopped; never await it
