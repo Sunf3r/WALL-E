@@ -8,8 +8,6 @@ import { delay } from '@util/functions.ts'
 import cache from '@plugin/cache.ts'
 import bot from '@plugin/bot.ts'
 
-// removed execAsync
-
 type triggerIncludes = { includes: str[]; template: str }
 type triggerNotIncludes = { notIncludes: str[]; template: str }
 type trigger = triggerIncludes | triggerNotIncludes
