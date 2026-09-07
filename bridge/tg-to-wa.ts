@@ -118,8 +118,9 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 				await ctx.reply(`No WhatsApp account found for +${digits}.`)
 				return
 			}
-			const name = (args.slice(1).join(' ') || `+${digits}`).slice(0, 128)
-			const topic = await tg.api.createForumTopic(supergroupId, name)
+			const name = (args.slice(1).join(' ') || `+${digits}`).replace(/[\n\r]+/g, ' ').trim()
+				.slice(0, 128) || `+${digits}`
+			const topic = await limiter.enqueue(() => tg.api.createForumTopic(supergroupId, name))
 			db.getOrCreate(jid, topic.message_thread_id, name, '1:1')
 			await ctx.reply(
 				`Bridged +${digits} → topic #${topic.message_thread_id}. Write there to send.`,

@@ -728,9 +728,10 @@ const WA_TO_TG_REACTION_FALLBACK: Record<string, string> = {
 }
 
 async function createForumTopic(displayName: string, _isGroup: boolean): Promise<number> {
-	if (!tg) throw new Error('Telegram bot not initialized')
-	const name = (displayName || 'Unknown').slice(0, 128) || 'Unknown'
-	const topic = await tg.api.createForumTopic(supergroupId, name)
+	if (!tg || !limiter) throw new Error('Telegram bot not initialized')
+	const name = (displayName || 'Unknown').replace(/[\n\r]+/g, ' ').trim().slice(0, 128) ||
+		'Unknown'
+	const topic = await limiter.enqueue(() => tg!.api.createForumTopic(supergroupId, name))
 	return topic.message_thread_id
 }
 
