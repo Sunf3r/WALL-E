@@ -1,4 +1,4 @@
-import { type AnyMessageContent, downloadMediaMessage, type proto } from 'baileys'
+import { downloadMediaMessage, type proto } from 'baileys'
 import { findCachedOriginal, savePendingQuote } from '@plugin/deletedStore.ts'
 import { type CmdCtx, type Msg, type MsgTypes } from '@conf/types/types.d.ts'
 import { allMsgTypes, coolValues, isMedia } from '@conf/types/msgs.ts'
@@ -331,26 +331,4 @@ function getMsgType(m: proto.IMessage): [MsgTypes, str] {
 	return ['event', Object.keys(m!)[0]] // return raw type
 }
 
-// msgMeta: get some meta data from a msg
-function msgMeta(
-	msg: str | Msg | proto.IMessageKey,
-	body: str | AnyMessageContent,
-	reply?: proto.IWebMessageInfo,
-) {
-	let chat = typeof msg === 'string'
-		? msg
-		: (msg as Msg).chat || (msg as proto.IMessageKey).remoteJid
-	const text = typeof body === 'string' ? { text: body } : body
-	const quote = reply
-		? { quoted: reply }
-		: typeof msg === 'string'
-		? {}
-		: { quoted: (msg as Msg).message }
-	const key = (msg as Msg).key ? (msg as Msg).key : msg as proto.IMessageKey
-
-	if (chat && !chat.includes('@')) chat += '@s.whatsapp.net'
-
-	return { key, text, chat, quote }
-}
-
-export { checkMatch, downloadMedia, getCtx, msgMeta }
+export { checkMatch, downloadMedia, getCtx }
