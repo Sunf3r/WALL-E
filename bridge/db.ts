@@ -130,10 +130,16 @@ export class BridgeDB {
 		if (existing) {
 			this.db
 				.prepare(
-					'UPDATE mappings SET last_active_at = ?, display_name = ? WHERE whatsapp_jid = ?',
+					'UPDATE mappings SET telegram_topic_id = ?, display_name = ?, archived = 0, last_active_at = ? WHERE whatsapp_jid = ?',
 				)
-				.run(Date.now(), displayName, jid)
-			return { ...toMapping(existing), last_active_at: Date.now(), display_name: displayName }
+				.run(topicId, displayName, Date.now(), jid)
+			return {
+				...toMapping(existing),
+				telegram_topic_id: topicId,
+				display_name: displayName,
+				archived: false,
+				last_active_at: Date.now(),
+			}
 		}
 
 		const row: MappingRow = {
