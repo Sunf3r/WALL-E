@@ -15,6 +15,7 @@ async function folderHandler(path: str, handler: Func) {
 	for (const { name: category } of Deno.readDirSync(path)) {
 		// For each category folder
 		for (const { name: file } of Deno.readDirSync(`${path}/${category}`)) {
+			if (!file.endsWith('.ts')) continue
 			// for each file of each category
 			const imported = await import(`file://${path}/${category}/${file}`)
 
