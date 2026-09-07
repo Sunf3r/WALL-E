@@ -7,7 +7,9 @@ import { Bot } from 'grammy'
 import bot from '@plugin/bot.ts'
 import type { BridgeDB } from './db.ts'
 import type { RateLimiter } from './rate-limiter.ts'
-import { tgEntitiesToWa } from './format.ts'
+import { formatBytes, tgEntitiesToWa } from './format.ts'
+
+export { formatBytes }
 
 export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter): void {
 	const supergroupId = String(Deno.env.get('TELEGRAM_SUPERGROUP_ID'))
@@ -648,19 +650,6 @@ export interface TgDownload {
 	label: string
 	bytes: number | null
 	tooLarge: boolean
-}
-
-export function formatBytes(n: number): string {
-	const v = Math.max(0, Math.floor(n))
-	if (v < 1024) return `${v} B`
-	const units = ['KB', 'MB', 'GB'] as const
-	let size = v / 1024
-	let u = 0
-	while (size >= 1024 && u < units.length - 1) {
-		size /= 1024
-		u++
-	}
-	return `${size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[u]}`
 }
 
 function tgBytes(v: unknown): number | null {

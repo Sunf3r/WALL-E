@@ -14,7 +14,9 @@ import { logger } from '@util/proto.ts'
 import bot from '@plugin/bot.ts'
 import type { BridgeDB, MirrorKind, ReplyMapRow } from './db.ts'
 import type { RateLimiter } from './rate-limiter.ts'
-import { parseVcard, type TgEntity, waMarkdownToTgEntities } from './format.ts'
+import { formatBytes, parseVcard, type TgEntity, waMarkdownToTgEntities } from './format.ts'
+
+export { formatBytes }
 
 let tg: Bot | null = null
 let db: BridgeDB | null = null
@@ -1405,19 +1407,6 @@ export interface WaDownload {
 	media: WaMedia | null
 	label: string
 	bytes: number | null
-}
-
-export function formatBytes(n: number): string {
-	const v = Math.max(0, Math.floor(n))
-	if (v < 1024) return `${v} B`
-	const units = ['KB', 'MB', 'GB'] as const
-	let size = v / 1024
-	let u = 0
-	while (size >= 1024 && u < units.length - 1) {
-		size /= 1024
-		u++
-	}
-	return `${size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[u]}`
 }
 
 // Normalize a Baileys fileLength (number | numeric string | Long-like

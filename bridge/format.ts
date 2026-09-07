@@ -149,6 +149,20 @@ export function waMarkdownToTgEntities(raw: string): { text: string; entities: T
 	return { text, entities }
 }
 
+// Shared byte formatter for bridge failure lines.
+export function formatBytes(n: number): string {
+	const v = Math.max(0, Math.floor(n))
+	if (v < 1024) return `${v} B`
+	const units = ['KB', 'MB', 'GB'] as const
+	let size = v / 1024
+	let u = 0
+	while (size >= 1024 && u < units.length - 1) {
+		size /= 1024
+		u++
+	}
+	return `${size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[u]}`
+}
+
 // Minimal vCard parse (WhatsApp contactMessage.vcard) → { name, phone }.
 // Handles `FN:` and `TEL…:number` lines; enough for sendContact + fallback.
 export function parseVcard(vcard: string | null | undefined): { name: string; phone: string } {
