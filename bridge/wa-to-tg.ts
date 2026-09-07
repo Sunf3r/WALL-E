@@ -168,18 +168,21 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				special = null
 			}
 
-			if (!text && !media && !special) {
-				// A media node whose download failed would otherwise vanish
-				// silently — tell the topic what exactly didn't cross, with
-				// its kind and size when the node advertised them.
-				if (dl && topicId !== null) {
-					await notifyTopic(
-						topicId,
-						waDownloadFailureLine(dl.label, dl.bytes),
-					)
-				}
-				continue
+		if (!text && !media && !special) {
+			// A media node whose download failed would otherwise vanish
+			// silently — tell the topic what exactly didn't cross, with
+			// its kind and size when the node advertised them.
+			if (topicId !== null) {
+				const rawNode: any = unwrap(m.message)
+				const albumFallback = rawNode?.albumMessage ? 'album' : null
+				const label = dl?.label ?? albumFallback ?? 'message'
+				await notifyTopic(
+					topicId,
+					dl ? waDownloadFailureLine(dl.label, dl.bytes) : `⚠️ A WhatsApp ${label} has no Telegram equivalent — it didn't cross.`,
+				)
 			}
+			continue
+		}
 
 			// WhatsApp quote → Telegram reply. Resolve the quoted stanzaId to
 			// the Telegram message mirroring the original; when the original
@@ -284,12 +287,18 @@ export function isAlbumEligible(
 		!special && body.length <= 1024
 }
 
+const MAX_ALBUM_ITEMS = 10
+
 function bufferAlbumItem(jid: string, m: proto.IWebMessageInfo, item: AlbumItem): void {
 	const key = albumKey(jid, m)
 	const existing = pendingAlbums.get(key)
 	if (existing) {
-		existing.items.push(item)
-		return
+		if (existing.items.length >= MAX_ALBUM_ITEMS) {
+			void flushAlbum(key).catch((e) => console.error('[BRIDGE] album flush failed:', e))
+		} else {
+			existing.items.push(item)
+			return
+		}
 	}
 	const timer = setTimeout(() => {
 		void flushAlbum(key).catch((e) => console.error('[BRIDGE] album flush failed:', e))
@@ -878,10 +887,19 @@ async function sendToTopic(
 			})
 			break
 		case 'sticker':
-			sent = await tg.api.sendSticker(supergroupId, file, {
-				message_thread_id: topicId,
-				...reply,
-			})
+			try {
+				sent = await tg.api.sendSticker(supergroupId, file, {
+					message_thread_id: topicId,
+					...reply,
+				})
+			} catch {
+				sent = await tg.api.sendDocument(supergroupId, file, {
+					...thread,
+					caption,
+					...captionEntities,
+					...reply,
+				})
+			}
 			break
 		default:
 			sent = await tg.api.sendDocument(supergroupId, file, {
