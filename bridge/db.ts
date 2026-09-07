@@ -230,6 +230,8 @@ export class BridgeDB {
 		)
 	}
 
+	private lastReplyPrune = 0
+
 	saveReplyMap(
 		tgMsgId: number,
 		waJid: string,
@@ -244,10 +246,14 @@ export class BridgeDB {
 				'INSERT OR REPLACE INTO reply_map (tg_msg_id, wa_jid, wa_msg_id, wa_key_json, tg_kind, tg_text, tg_entities, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
 			)
 			.run(tgMsgId, waJid, waMsgId, waKeyJson, tgKind, tgText, tgEntitiesJson, Date.now())
-		// keep the table small: only recent messages can be replied to anyway
-		this.db.prepare(
-			'DELETE FROM reply_map WHERE created_at < ?',
-		).run(Date.now() - 7 * 24 * 60 * 60 * 1000)
+		// keep the table small: prune 7-day rows at most once per hour
+		const now = Date.now()
+		if (now - this.lastReplyPrune > 60 * 60 * 1000) {
+			this.lastReplyPrune = now
+			this.db.prepare(
+				'DELETE FROM reply_map WHERE created_at < ?',
+			).run(now - 7 * 24 * 60 * 60 * 1000)
+		}
 	}
 
 	getReplyMap(tgMsgId: number): ReplyMapRow | undefined {
