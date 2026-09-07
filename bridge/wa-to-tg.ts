@@ -12,7 +12,7 @@ import { Bot, InputFile } from 'grammy'
 import { findKey } from '@util/functions.ts'
 import { logger } from '@util/proto.ts'
 import bot from '@plugin/bot.ts'
-import type { BridgeDB, MirrorKind } from './db.ts'
+import type { BridgeDB, MirrorKind, ReplyMapRow } from './db.ts'
 import type { RateLimiter } from './rate-limiter.ts'
 import { parseVcard, type TgEntity, waMarkdownToTgEntities } from './format.ts'
 
@@ -171,8 +171,8 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 
 			// WhatsApp quote → Telegram reply. Resolve the quoted stanzaId to
 			// the Telegram message mirroring the original; when the original
-			// was never bridged (history, pruned), fall back to a textual
-			// quote header so context isn't silently lost.
+			// was never bridged (history, pruned), fall back to a quote-styled
+			// header (blockquote entity) so context isn't silently lost.
 			const quote = getQuoteInfo(m, displayName)
 			let replyToTgId: number | null = null
 			let quoteHeader: string | null = null
@@ -198,6 +198,11 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				...e,
 				offset: e.offset + prefix.length,
 			}))
+			// Unmapped originals can't use reply_parameters — render the
+			// fallback header as a real Telegram quote block instead.
+			if (!stickerFallback && quoteHeader) {
+				entities.unshift({ type: 'blockquote', offset: 0, length: quoteHeader.length })
+			}
 			if (isAlbumEligible(media, special, body)) {
 				// Photos/videos wait out the album window so rapid bursts
 				// cross as one Telegram media group instead of N singles.
@@ -353,6 +358,8 @@ async function flushAlbum(key: string): Promise<void> {
 							it.m.key?.id || '',
 							JSON.stringify(it.m.key || {}),
 							'media',
+							storedText(it.body),
+							storedEntities(it.entities),
 						)
 					}
 				})
@@ -371,6 +378,8 @@ async function flushAlbum(key: string): Promise<void> {
 						last.m.key?.id || '',
 						JSON.stringify(last.m.key || {}),
 						'text',
+						storedText(followBody),
+						null,
 					)
 				}
 			} catch (e) {
@@ -562,10 +571,98 @@ async function handleWaDeletes(
 	}
 }
 
+// Cap mirror content stored for revoke-as-spoiler — enough for a tombstone,
+// small enough to keep reply_map lean.
+const STORED_TEXT_MAX = 1500
+
+function storedText(body: string): string | null {
+	if (!body) return null
+	return body.length > STORED_TEXT_MAX ? body.slice(0, STORED_TEXT_MAX) : body
+}
+
+function storedEntities(entities: TgEntity[]): string | null {
+	if (!entities || entities.length === 0) return null
+	try {
+		return JSON.stringify(entities)
+	} catch {
+		return null
+	}
+}
+
+// Marker heading a spoiler tombstone. The original content follows it,
+// hidden behind a spoiler entity — users see WHY it's blurred.
+const SPOILER_MARKER = '🗑️ Deleted on WhatsApp\n'
+
+// Re-edit a mirrored message into a spoiler tombstone instead of deleting
+// it. Returns true on success. Uses the STORED original (so repeat revokes
+// are idempotent); text mirrors edit in place, media mirrors edit the
+// caption. Anything else (stickers, specials, legacy rows without content)
+// returns false so the caller falls back to deleting.
+async function spoilerTgMirror(target: ReplyMapRow): Promise<boolean> {
+	if (!tg || !limiter || !db) return false
+	const kind = target.tg_kind
+	if (kind !== 'text' && kind !== 'media' && kind !== 'unknown') return false
+	const orig = (target.tg_text || '').slice(0, STORED_TEXT_MAX)
+	if (!orig) return false
+	let kept: TgEntity[] = []
+	try {
+		const parsed: unknown = JSON.parse(target.tg_entities || '[]')
+		if (Array.isArray(parsed)) {
+			kept = (parsed as any[]).filter((e) =>
+				e && typeof e.offset === 'number' && typeof e.length === 'number' &&
+				e.offset >= 0 && e.length > 0 && e.offset + e.length <= orig.length &&
+				typeof e.type === 'string'
+			).map((e) => ({ type: e.type as TgEntity['type'], offset: e.offset, length: e.length }))
+		}
+	} catch {
+		kept = []
+	}
+	for (const e of kept) e.offset += SPOILER_MARKER.length
+	kept.push({ type: 'spoiler', offset: SPOILER_MARKER.length, length: orig.length })
+	const rich = kept.length > 0 ? { entities: kept } : undefined
+	let ok = false
+	try {
+		await limiter.enqueue(async () => {
+			try {
+				if (kind === 'media') {
+					const caption = (SPOILER_MARKER + orig).slice(0, 1024)
+					const cEnts = kept.filter((e) => e.offset + e.length <= caption.length)
+					await tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
+						caption,
+						caption_entities: cEnts.length > 0 ? cEnts : undefined,
+					})
+				} else {
+					await tg!.api.editMessageText(
+						supergroupId,
+						target.tg_msg_id,
+						SPOILER_MARKER + orig,
+						rich,
+					)
+				}
+				console.debug(`[BRIDGE] WA→TG revoke spoilered TG msg ${target.tg_msg_id}`)
+				ok = true
+			} catch (e) {
+				console.debug(
+					`[BRIDGE] spoiler edit of TG msg ${target.tg_msg_id} failed, trying delete: ${
+						describeErr(e)
+					}`,
+				)
+				ok = false
+			}
+		})
+	} catch {
+		ok = false
+	}
+	return ok
+}
+
 // Delete the Telegram mirror of a revoked/deleted WA message. Shared by the
 // `messages.delete` path (delete-for-me syncs) and the REVOKE branch of
-// `messages.update` (delete-for-everyone). Drops the reply_map row on
-// success so later edits/reactions to the deleted message don't 400.
+// `messages.update` (delete-for-everyone). Prefers re-editing the mirror
+// into a spoiler tombstone (content stays visible on tap); only mirrors
+// without stored content (TG-originated rows, stickers, specials) or failed
+// spoiler edits are actually deleted. Drops the reply_map row when the
+// message ends up deleted so later edits/reactions to it don't 400.
 async function deleteTgMirror(jid: string, id: string): Promise<void> {
 	if (!db || !limiter || !tg) return
 	const mapping = db.getByJid(jid)
@@ -575,6 +672,7 @@ async function deleteTgMirror(jid: string, id: string): Promise<void> {
 		console.debug(`[BRIDGE] skipping WA delete: target ${id} not in reply_map`)
 		return
 	}
+	if (await spoilerTgMirror(target)) return
 	await limiter.enqueue(async () => {
 		try {
 			await tg!.api.deleteMessage(supergroupId, target.tg_msg_id)
@@ -672,8 +770,18 @@ async function sendToTopic(
 		: undefined
 	const rich = entities.length > 0 ? { entities } : undefined
 	const thread = { message_thread_id: topicId } as const
+	// Persist the mirror content alongside the mapping so a later revoke can
+	// re-edit the message into a spoiler tombstone instead of deleting it.
 	const save = (tgId: number, kind: MirrorKind): void => {
-		db!.saveReplyMap(tgId, waJid, waMsg.key?.id || '', JSON.stringify(waMsg.key || {}), kind)
+		db!.saveReplyMap(
+			tgId,
+			waJid,
+			waMsg.key?.id || '',
+			JSON.stringify(waMsg.key || {}),
+			kind,
+			storedText(body),
+			storedEntities(entities),
+		)
 	}
 
 	// Location / contact / poll have no caption concept: the content goes
@@ -702,9 +810,12 @@ async function sendToTopic(
 	}
 
 	// Stickers take no caption: deliver an unmapped quote header as its own
-	// message so the context still lands in the topic.
+	// quote-styled message so the context still lands in the topic.
 	if (media.kind === 'sticker' && quote.header && !quote.tgId) {
-		await tg.api.sendMessage(supergroupId, quote.header, { message_thread_id: topicId })
+		await tg.api.sendMessage(supergroupId, quote.header, {
+			message_thread_id: topicId,
+			entities: [{ type: 'blockquote', offset: 0, length: quote.header.length }],
+		})
 	}
 
 	const caption = body.length > 1024 ? undefined : (body || undefined)

@@ -24,6 +24,12 @@ export interface ReplyMapRow {
 	// rows written before this column existed (or TG-originated rows, whose
 	// TG side is the original and never needs editing by the bot).
 	tg_kind: string
+	// Last relayed mirror content (WA→TG rows only): plain body text plus
+	// JSON-encoded entities. Lets a later revoke re-edit the mirror into a
+	// spoiler tombstone instead of deleting it. Null for TG-originated rows
+	// (the TG side is a user message the bot can't edit) and legacy rows.
+	tg_text: string | null
+	tg_entities: string | null
 }
 
 // Mirror kinds stored in reply_map.tg_kind. Only WA→TG rows carry a real
@@ -91,6 +97,14 @@ export class BridgeDB {
 		const cols = this.db.prepare(`PRAGMA table_info(reply_map)`).all() as { name: string }[]
 		if (!cols.some((c) => c.name === 'tg_kind')) {
 			this.db.exec(`ALTER TABLE reply_map ADD COLUMN tg_kind TEXT NOT NULL DEFAULT 'unknown'`)
+		}
+		// Last relayed mirror content for revoke-as-spoiler. Nullable so
+		// legacy rows and TG-originated rows simply have nothing stored.
+		if (!cols.some((c) => c.name === 'tg_text')) {
+			this.db.exec(`ALTER TABLE reply_map ADD COLUMN tg_text TEXT DEFAULT NULL`)
+		}
+		if (!cols.some((c) => c.name === 'tg_entities')) {
+			this.db.exec(`ALTER TABLE reply_map ADD COLUMN tg_entities TEXT DEFAULT NULL`)
 		}
 		// Per-chat mute flag. Same safe-ADD pattern for existing DBs.
 		const mapCols = this.db.prepare(`PRAGMA table_info(mappings)`).all() as { name: string }[]
@@ -216,12 +230,14 @@ export class BridgeDB {
 		waMsgId: string,
 		waKeyJson: string,
 		tgKind: MirrorKind = 'unknown',
+		tgText: string | null = null,
+		tgEntitiesJson: string | null = null,
 	): void {
 		this.db
 			.prepare(
-				'INSERT OR REPLACE INTO reply_map (tg_msg_id, wa_jid, wa_msg_id, wa_key_json, tg_kind, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+				'INSERT OR REPLACE INTO reply_map (tg_msg_id, wa_jid, wa_msg_id, wa_key_json, tg_kind, tg_text, tg_entities, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
 			)
-			.run(tgMsgId, waJid, waMsgId, waKeyJson, tgKind, Date.now())
+			.run(tgMsgId, waJid, waMsgId, waKeyJson, tgKind, tgText, tgEntitiesJson, Date.now())
 		// keep the table small: only recent messages can be replied to anyway
 		this.db.prepare(
 			'DELETE FROM reply_map WHERE created_at < ?',

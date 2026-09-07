@@ -79,9 +79,14 @@ deno task start:dev   # or: pm2 start conf/ecosystem.config.cjs --attach
   supergroup and polling must opt into `message_reaction` (done in `mod.ts` — Telegram excludes it
   from defaults). TG-initiated react echoes are deduplicated via a pending mark, so genuine
   reactions from your own phone still relay; WA reaction carriers never surface as `You: ❤️` text.
-- Deletes sync WA→TG (mirror is deleted, needs delete rights in the supergroup; old/gone mirrors
-  just log). TG→WA delete sync is impossible — the Bot API emits no event when a Telegram message is
-  deleted.
+- Deletes sync WA→TG as a spoiler tombstone: the mirror is re-edited to `🗑️ Deleted on
+  WhatsApp`
+  plus the original content hidden behind a spoiler (text in place, media via caption; repeat
+  revokes are idempotent). Mirrors without stored content (stickers, specials, old rows) are still
+  deleted instead — needs delete rights in the supergroup; old/gone mirrors just log. TG→WA delete
+  sync is impossible — the Bot API emits no event when a Telegram message is deleted.
+- WhatsApp quotes of never-bridged originals render as a real Telegram quote block (blockquote
+  entity) instead of plain `↩️` text; mapped originals still use native replies.
 - Albums: rapid WA photo/video bursts from one sender cross as a single Telegram media group (1.5s
   batching window, so single photos arrive ~1.5s later; extra captions follow as text); TG albums
   (`media_group_id`) forward in order over a 1.2s window (Baileys has no album-send, so WA receives

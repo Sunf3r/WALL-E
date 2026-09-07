@@ -6,7 +6,14 @@
 // These converters translate between them tolerantly — anything unrecognized
 // passes through as plain text rather than failing the relay.
 
-export type TgEntityType = 'bold' | 'italic' | 'strikethrough' | 'code' | 'pre'
+export type TgEntityType =
+	| 'bold'
+	| 'italic'
+	| 'strikethrough'
+	| 'code'
+	| 'pre'
+	| 'spoiler'
+	| 'blockquote'
 
 export interface TgEntity {
 	type: TgEntityType
@@ -53,6 +60,12 @@ export function tgEntitiesToWa(text: string, entities?: any[] | null): string {
 				break
 			case 'text_link':
 				if (e.url) close = ` (${e.url})`
+				break
+			case 'blockquote':
+				// WhatsApp has no quote entity — prefix the first line. The
+				// insertion engine only supports one open marker, so
+				// multi-line quotes degrade to a first-line prefix.
+				open = '> '
 				break
 			default:
 				continue
