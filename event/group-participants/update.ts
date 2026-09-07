@@ -8,7 +8,8 @@ import { getGroup } from '@db'
 export default async function (groupEvent: Event) {
 	const group = await getGroup(groupEvent.id)
 	if (!group) return
-	const participant = groupEvent.participants[0]
+	const participant = groupEvent.participants?.[0]
+	if (!participant) return
 
 	switch (groupEvent.action) {
 		case 'promote': {
