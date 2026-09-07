@@ -328,12 +328,20 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 				return
 			}
 
-			const quoted = buildQuoted(msg, mapping.whatsapp_jid, db)
-			const waContent = await buildWaContent(text, media, msg)
+			let quoted = buildQuoted(msg, mapping.whatsapp_jid, db)
+			let textForWa = text
+			if (!quoted && msg.reply_to_message) {
+				const author = msg.reply_to_message.from?.first_name ||
+					msg.reply_to_message.from?.username || 'user'
+				const preview = (msg.reply_to_message.text || msg.reply_to_message.caption || '')
+					.slice(0, 200)
+				if (preview) textForWa = `↩️ ${author}: ${preview}\n${text}`.trim()
+			}
+			const waContent = await buildWaContent(textForWa, media, msg)
 			if (!waContent) return
-			const needsTextFollowUp = !!text &&
+			const needsTextFollowUp = !!textForWa &&
 				(!!msg.location || !!msg.video_note ||
-					(msg.contact && !String(waContent.text || '').includes(text)))
+					(msg.contact && !String(waContent.text || '').includes(textForWa)))
 
 			await limiter.enqueue(async () => {
 				const sent = await bot.sock.sendMessage(
@@ -353,7 +361,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 					)
 				}
 				if (needsTextFollowUp) {
-					await bot.sock.sendMessage(mapping.whatsapp_jid, { text })
+					await bot.sock.sendMessage(mapping.whatsapp_jid, { text: textForWa })
 				}
 				db.updateLastActive(mapping.whatsapp_jid)
 			})
@@ -532,8 +540,9 @@ export async function convertWebmToStickerWebp(input: Uint8Array): Promise<Uint8
 				stdin: 'null',
 				stdout: 'null',
 				stderr: 'null',
+				signal: AbortSignal.timeout(60_000),
 			})
-			const { success } = await proc.output()
+			const { success } = await proc.output().catch(() => ({ success: false }))
 			if (!success) continue
 			const out = await Deno.readFile(outPath).catch((): Uint8Array | null => null)
 			if (out && out.length > 0 && out.length <= 500 * 1024) return out
