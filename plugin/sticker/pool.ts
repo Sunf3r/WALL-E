@@ -36,6 +36,8 @@ interface QueueEntry {
 
 // ── pool ────────────────────────────────────────────────────────────
 
+const MAX_QUEUE = 8
+
 export class StickerPool {
 	private workers: PoolWorker[]
 	private queue: QueueEntry[] = []
@@ -60,6 +62,10 @@ export class StickerPool {
 			if (idle) {
 				this.dispatch(idle, job, resolve, reject)
 			} else {
+				if (this.queue.length >= MAX_QUEUE) {
+					reject(new Error('sticker queue is busy, try again later'))
+					return
+				}
 				this.queue.push({ ...job, resolve, reject })
 			}
 		})

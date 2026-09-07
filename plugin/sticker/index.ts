@@ -69,3 +69,8 @@ export async function createStickers(opts: StickerOptions): Promise<StickerResul
 		})),
 	)
 }
+
+/** Terminate worker threads. Call on process shutdown. */
+export async function shutdownStickers(): Promise<void> {
+	await pool.terminate()
+}
