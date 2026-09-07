@@ -17,7 +17,7 @@ try {
 	Deno.mkdirSync(TEMP_DIR, { recursive: true })
 } catch { /* exists */ }
 
-self.onmessage = (e: MessageEvent<WorkerRequest>) => {
+self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
 	const req = e.data
 	const prefix = `stk_${req.id}_${Date.now()}`
 	const inputPath = `${TEMP_DIR}/${prefix}_in`
@@ -25,7 +25,7 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
 	try {
 		Deno.writeFileSync(inputPath, req.buffer)
 
-		const results = encodeVideo(
+		const results = await encodeVideo(
 			inputPath,
 			TEMP_DIR,
 			prefix,

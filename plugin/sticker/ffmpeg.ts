@@ -14,7 +14,7 @@ import type { StickerFormat } from '@plugin/sticker/types.ts'
 
 const SIZE = 512
 const MAX_DURATION = 11
-const _TIMEOUT_MS = 60_000
+const TIMEOUT_MS = 60_000
 
 /**
  * Compression levels tried in order.
@@ -41,15 +41,15 @@ export interface FfmpegResult {
  * Tries progressively lower quality levels until every output fits
  * under `maxSize` bytes. Returns one result per requested format.
  */
-export function encodeVideo(
+export async function encodeVideo(
 	inputPath: string,
 	outputDir: string,
 	prefix: string,
 	formats: StickerFormat[],
 	maxSize: number,
-): FfmpegResult[] {
+): Promise<FfmpegResult[]> {
 	for (const level of LEVELS) {
-		const results = runFfmpeg(inputPath, outputDir, prefix, formats, level)
+		const results = await runFfmpeg(inputPath, outputDir, prefix, formats, level)
 		if (results.every((r) => r.size <= maxSize)) return results
 
 		// too big — clean outputs and retry with lower settings
@@ -57,7 +57,7 @@ export function encodeVideo(
 	}
 
 	// fallback: return whatever the lowest level produced
-	return runFfmpeg(inputPath, outputDir, prefix, formats, LEVELS[LEVELS.length - 1])
+	return await runFfmpeg(inputPath, outputDir, prefix, formats, LEVELS[LEVELS.length - 1])
 }
 
 /** Remove all temp files created by a sticker job. */
@@ -76,13 +76,13 @@ export function cleanup(
 // ── internals ───────────────────────────────────────────────────────
 
 /** Execute a single ffmpeg pass producing all requested formats. */
-function runFfmpeg(
+async function runFfmpeg(
 	inputPath: string,
 	outputDir: string,
 	prefix: string,
 	formats: StickerFormat[],
 	level: { quality: number; fps: number },
-): FfmpegResult[] {
+): Promise<FfmpegResult[]> {
 	const { filter, maps } = buildFilterGraph(
 		formats,
 		level.quality,
@@ -102,13 +102,22 @@ function runFfmpeg(
 		...maps,
 	]
 
-	const cmd = new Deno.Command('ffmpeg', {
-		args,
-		stdin: 'null',
-		stdout: 'piped',
-		stderr: 'piped',
-	})
-	const proc = cmd.outputSync()
+	let proc
+	try {
+		const cmd = new Deno.Command('ffmpeg', {
+			args,
+			stdin: 'null',
+			stdout: 'piped',
+			stderr: 'piped',
+			signal: AbortSignal.timeout(TIMEOUT_MS),
+		})
+		proc = await cmd.output()
+	} catch (e) {
+		if ((e as Error)?.name === 'TimeoutError') {
+			throw new Error(`ffmpeg timed out after ${TIMEOUT_MS}ms`)
+		}
+		throw e
+	}
 
 	if (!proc.success) {
 		const stderr = new TextDecoder().decode(proc.stderr).slice(-500) || 'unknown error'
