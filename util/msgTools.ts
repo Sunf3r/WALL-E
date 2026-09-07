@@ -26,7 +26,7 @@ async function getCtx(raw: proto.IWebMessageInfo): Promise<CmdCtx> {
 	if (!coolValues.includes(types[0])) return fakeCtx
 
 	let group = undefined
-	if (key.remoteJid?.includes('@g.us')) group = await getGroup(key.remoteJid)
+	if (key.remoteJid?.includes('@g.us')) group = await getGroup(key.remoteJid) ?? undefined
 
 	let lid = key?.participant
 	if (!lid) lid = key.fromMe ? bot.lid : key.remoteJid!

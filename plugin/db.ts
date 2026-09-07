@@ -70,11 +70,35 @@ export async function getUser(
 	return
 }
 
-export async function getGroup(id: str): Promise<Group> {
+export async function getGroup(id: str): Promise<Group | null> {
 	let group = cache.groups.get(id)
 	if (group) return group
-	const data = await bot.sock.groupMetadata(id)
+	let data
+	try {
+		data = await bot.sock.groupMetadata(id)
+	} catch (e) {
+		// 403 forbidden = bot was removed or is no longer a member; there is
+		// no metadata to fetch. Return null so callers skip instead of
+		// crashing the event handler with a noisy stack dump.
+		if (isForbiddenGroupError(e)) return null
+		throw e
+	}
 	group = new Group(data)
 	cache.groups.add(group.id, group)
 	return group
+}
+
+// True when Baileys failed groupMetadata because the bot may not query the
+// group (removed, never a member). Boom shape seen in prod: data 403 with
+// an "Error: forbidden" message.
+function isForbiddenGroupError(e: unknown): boolean {
+	try {
+		const anyErr = e as { data?: unknown; message?: unknown; description?: unknown }
+		if (anyErr?.data === 403) return true
+		const msg = typeof anyErr?.message === 'string' ? anyErr.message : ''
+		const desc = typeof anyErr?.description === 'string' ? anyErr.description : ''
+		return msg.includes('forbidden') || desc.includes('forbidden')
+	} catch {
+		return false
+	}
 }
