@@ -21,12 +21,24 @@ let db: BridgeDB | null = null
 let limiter: RateLimiter | null = null
 let supergroupId: string | number = ''
 const groupNameCache = new Map<string, string>()
+const MAX_NAME_CACHE = 500
+let attachedSock: unknown = null
+
+function cacheGroupName(jid: string, name: string): void {
+	groupNameCache.set(jid, name)
+	if (groupNameCache.size > MAX_NAME_CACHE) {
+		const oldest = groupNameCache.keys().next().value
+		if (oldest !== undefined) groupNameCache.delete(oldest)
+	}
+}
 
 export function attachWaRelay(tgBot: Bot, bridgeDb: BridgeDB, rateLimiter: RateLimiter): void {
 	tg = tgBot
 	db = bridgeDb
 	limiter = rateLimiter
 	supergroupId = Deno.env.get('TELEGRAM_SUPERGROUP_ID')!
+	if (attachedSock === bot.sock) return
+	attachedSock = bot.sock
 
 	// Additional listener on the SHARED socket — the core bot handler stays untouched.
 	bot.sock.ev.on('messages.upsert', async (raw: { messages: proto.IWebMessageInfo[] }) => {
@@ -404,14 +416,14 @@ async function resolveChatName(
 		try {
 			const meta = await bot.sock.groupMetadata(jid)
 			if (meta?.subject) {
-				groupNameCache.set(jid, meta.subject)
+				cacheGroupName(jid, meta.subject)
 				return meta.subject
 			}
 		} catch {
 			// fall through to pushName/phone
 		}
 		const fallback = pushName || jid.split('@')[0]
-		groupNameCache.set(jid, fallback)
+		cacheGroupName(jid, fallback)
 		return fallback
 	}
 	return pushName || phoneOf(jid) || jid.split('@')[0]
@@ -1196,7 +1208,7 @@ async function handleGroupUpdates(
 			const mapping = db.getByJid(u.id)
 			if (!mapping || mapping.archived || mapping.muted) continue
 			if (mapping.display_name === u.subject) continue
-			groupNameCache.set(u.id, u.subject)
+			cacheGroupName(u.id, u.subject)
 			db.getOrCreate(u.id, mapping.telegram_topic_id, u.subject, mapping.chat_type)
 			await limiter.enqueue(() =>
 				tg!.api.editForumTopic(supergroupId, mapping.telegram_topic_id, {

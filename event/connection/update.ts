@@ -87,6 +87,12 @@ export default async function (event: Partial<ConnectionState>) {
 				} catch (e: unknown) {
 					print('HANDLER', 'loadEvents failed:', (e as Error)?.stack || String(e), 'red')
 				}
+				try {
+					const { reattachBridge } = await import('../../bridge/mod.ts')
+					reattachBridge()
+				} catch (e) {
+					print('BRIDGE', `reattach failed: ${(e as Error)?.message || e}`, 'red')
+				}
 			} catch (e) {
 				// Keep the process alive; the next 'close' or manual restart owns recovery.
 				print('SOCK', `Reconnect failed: ${(e as Error)?.message || e}`, 'red')
