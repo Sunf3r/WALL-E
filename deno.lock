@@ -8,10 +8,10 @@
     "npm:drizzle-kit@0.31.10": "0.31.10",
     "npm:drizzle-orm@0.45.2": "0.45.2_postgres@3.4.9",
     "npm:google-translate-api-x@^10.7.3": "10.7.3",
-    "npm:grammy@1.36.0": "1.36.0",
+    "npm:grammy@1.46.0": "1.46.0",
     "npm:humanize-duration@^3.34.1": "3.34.1",
     "npm:i18next-fs-backend@^2.6.7": "2.6.7",
-    "npm:i18next@^26.3.6": "26.4.2",
+    "npm:i18next@^26.4.2": "26.4.2",
     "npm:node-webpmux@^3.2.1": "3.2.1",
     "npm:postgres@3.4.9": "3.4.9",
     "npm:sharp@~0.35.4": "0.35.4"
@@ -454,8 +454,8 @@
       ],
       "scripts": true
     },
-    "@grammyjs/types@3.20.0": {
-      "integrity": "sha512-KIoikN5VTj6dcJpzMwXtouzaN3BZJ4jihBuEeXzWr25HtEfCF25V3dN11u+uNYi/9sBDvs0KCKZhyN/xFY0MBg=="
+    "@grammyjs/types@5.0.0": {
+      "integrity": "sha512-iq1Qrq1iPKkB8yAa0qSuIURMZOCuqTY5pWy5gHpCeL1oQ+GPadGhw/cDTVE8waJwuCzacUzuIjRv1sESvk7u7A=="
     },
     "@hapi/boom@9.1.4": {
       "integrity": "sha512-Ls1oH8jaN1vNsqcaHVYJrKmgMcKsC1wcp8bujvXrHaAqD2iDYq3HoOwsxwo09Cuda5R5nC0o0IxlrlTuvPuzSw==",
@@ -968,8 +968,8 @@
     "google-translate-api-x@10.7.3": {
       "integrity": "sha512-UCLhGMyzUiQQJuUjw6KM4scl4WJjMq5kYbq3eqLHB0KB96XBQ+VV7L/NUpJ9eMfVxXswXxA6xWhAX1h1OdDLZg=="
     },
-    "grammy@1.36.0": {
-      "integrity": "sha512-Y1HluocfdOu1ccP9VOWnsb4Ql8A4fZS13VFRArgnC5w5JaSsQjjP+C/oDZUD/e1tRDFdJ629NiT3Mnukn7lh0w==",
+    "grammy@1.46.0": {
+      "integrity": "sha512-/8Qw+iisrUdOMk+p2mjEHouMm/BBdBEN1DHh16wiTpRUZkxDG3PxexdjCvR+wvK3LWPdrEvnQbdrwpU954sPhg==",
       "dependencies": [
         "@grammyjs/types",
         "abort-controller",
@@ -1315,10 +1315,10 @@
       "npm:drizzle-kit@0.31.10",
       "npm:drizzle-orm@0.45.2",
       "npm:google-translate-api-x@^10.7.3",
-      "npm:grammy@1.36.0",
+      "npm:grammy@1.46.0",
       "npm:humanize-duration@^3.34.1",
       "npm:i18next-fs-backend@^2.6.7",
-      "npm:i18next@^26.3.6",
+      "npm:i18next@^26.4.2",
       "npm:node-webpmux@^3.2.1",
       "npm:postgres@3.4.9",
       "npm:sharp@~0.35.4"
