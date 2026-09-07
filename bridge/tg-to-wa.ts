@@ -11,8 +11,11 @@ import { tgEntitiesToWa } from './format.ts'
 
 export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter): void {
 	const supergroupId = String(Deno.env.get('TELEGRAM_SUPERGROUP_ID'))
+	const inSupergroup = (ctx: { chat?: { id?: string | number } }): boolean =>
+		String(ctx.chat?.id) === supergroupId
 
 	tg.command('start', async (ctx) => {
+		if (!inSupergroup(ctx)) return
 		await ctx.reply('WhatsApp bridge is active. Each WhatsApp chat mirrors to its own topic.')
 	})
 
@@ -24,6 +27,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 	})
 
 	tg.command('topics', async (ctx) => {
+		if (!inSupergroup(ctx)) return
 		const topics = db.getAllActive()
 		const msg = topics.map((t) =>
 			`${t.display_name} (${t.whatsapp_jid}) -> topic #${t.telegram_topic_id}`
@@ -32,6 +36,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 	})
 
 	tg.command('archive', async (ctx) => {
+		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
 		const mapping = db.getByTopicId(topicId)
@@ -43,6 +48,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 
 	// Alias kept for backwards compatibility.
 	tg.command('close', async (ctx) => {
+		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
 		const mapping = db.getByTopicId(topicId)
@@ -53,6 +59,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 	})
 
 	tg.command('reopen', async (ctx) => {
+		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
 		const all = db.getAll().find((t) => t.telegram_topic_id === topicId)
@@ -65,6 +72,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 	// Per-chat mute: /mute stops relay in both directions for this topic
 	// (mapping kept, history untouched); /unmute resumes.
 	tg.command('mute', async (ctx) => {
+		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
 		const mapping = db.getByTopicId(topicId)
@@ -75,6 +83,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 	})
 
 	tg.command('unmute', async (ctx) => {
+		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
 		// Muted mappings are still returned by getByTopicId (only archived
