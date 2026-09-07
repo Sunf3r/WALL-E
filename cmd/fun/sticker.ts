@@ -14,7 +14,7 @@ export default class extends Cmd {
 		super({
 			alias: ['s', 'sexo'],
 			cooldown: 5_000,
-			subCmds: ['rmbg', 'rounded', 'circle', 'default'],
+			subCmds: ['rmbg', 'rounded', 'circle'],
 		})
 	}
 
