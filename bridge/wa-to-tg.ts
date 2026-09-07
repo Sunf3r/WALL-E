@@ -737,6 +737,10 @@ export function waReactionToTgEmoji(text: string | null | undefined): string | n
 	if (!text) return null
 	const clean = text.replace(/\uFE0F/g, '').replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '').trim()
 	if (!clean) return null
+	// Flags (regional-indicator pairs) are not Telegram reactions — seen as
+	// 🇧🇷 REACTION_INVALID in prod. Fall back to the default instead of a
+	// failing roundtrip.
+	if (/^[\u{1F1E6}-\u{1F1FF}]{2,}$/u.test(clean)) return DEFAULT_TG_REACTION
 	return WA_TO_TG_REACTION_FALLBACK[clean] || clean
 }
 
@@ -759,6 +763,11 @@ const WA_TO_TG_REACTION_FALLBACK: Record<string, string> = {
 	'🫶': '❤',
 	'💖': '❤',
 	'💕': '❤',
+	// Observed as REACTION_INVALID in prod (not Telegram reactions or
+	// disabled): use the default heart instead of a failing roundtrip.
+	'✨': '❤',
+	'❓': '❤',
+	'💭': '❤',
 }
 
 async function createForumTopic(displayName: string, _isGroup: boolean): Promise<number> {
