@@ -80,7 +80,6 @@ const MAX_QUEUE = 500
 
 export class RateLimiter {
 	private limitMs: number
-	private maxRetries: number
 	private maxWaitMs: number
 	private defaultRetryAfterMs: number
 	private retryBufferMs: number
@@ -91,7 +90,9 @@ export class RateLimiter {
 
 	constructor(limitMs: number = 3000, opts: RateLimiterOptions = {}) {
 		this.limitMs = limitMs
-		this.maxRetries = opts.maxRetries ?? 5
+		// NB: opts.maxRetries is accepted for compat but 429 retries are
+		// unbounded by design (slow delivery, never drop).
+		void opts.maxRetries
 		this.maxWaitMs = opts.maxWaitMs ?? 120_000
 		this.defaultRetryAfterMs = opts.defaultRetryAfterMs ?? 5_000
 		this.retryBufferMs = opts.retryBufferMs ?? 500
