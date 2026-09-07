@@ -181,6 +181,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 	// message_id order through the normal single-send path (Baileys has no
 	// album-send API, so batching buys ordering, not a WA album).
 	const TG_ALBUM_WINDOW_MS = 1200
+	const mutedNoticeAt = new Map<number, number>()
 	interface TgAlbumItem {
 		msg: any
 		topicId: number
@@ -271,8 +272,20 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			if (!topicId) return
 
 			const mapping = db.getByTopicId(topicId)
-			if (!mapping || mapping.archived) return
+			if (!mapping || mapping.archived) {
+				const last = mutedNoticeAt.get(topicId) ?? 0
+				if (Date.now() - last > 60 * 60 * 1000) {
+					mutedNoticeAt.set(topicId, Date.now())
+					await notifyTopic(tg, limiter, topicId, '⚠️ This chat is archived — relay is paused. Use /reopen to resume.')
+				}
+				return
+			}
 			if (mapping.muted) {
+				const last = mutedNoticeAt.get(topicId) ?? 0
+				if (Date.now() - last > 60 * 60 * 1000) {
+					mutedNoticeAt.set(topicId, Date.now())
+					await notifyTopic(tg, limiter, topicId, '⚠️ This chat is muted — relay is paused. Use /unmute to resume.')
+				}
 				return
 			}
 
