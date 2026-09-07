@@ -59,4 +59,4 @@ const mediaValues = Object.values(mediaTypes)
 const isMedia = (type: MsgTypes) => mediaValues.includes(type)
 const isVisual = (type: MsgTypes) => visualValues.includes(type)
 
-export { allMsgTypes, coolTypes, coolValues, isMedia, isVisual, mediaTypes, textTypes, visualTypes }
+export { allMsgTypes, coolValues, isMedia, isVisual }
