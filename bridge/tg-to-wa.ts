@@ -343,7 +343,7 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 				return
 			}
 
-			let quoted = buildQuoted(msg, mapping.whatsapp_jid, db)
+			const quoted = buildQuoted(msg, mapping.whatsapp_jid, db)
 			let textForWa = text
 			if (!quoted && msg.reply_to_message) {
 				const author = msg.reply_to_message.from?.first_name ||
