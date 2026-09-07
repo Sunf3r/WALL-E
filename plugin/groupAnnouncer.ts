@@ -91,7 +91,6 @@ async function checkGroupAnnouncer(msg: Msg, user: User, group?: Group) {
 
 async function sendAnnouncements() {
 	if (!msgQueue[0]) return // there's no more msgs to send
-	// if (isSending === true) return // containment measure to stop the hell
 	isSending = true // now, sendAnnouncements() won't be called again
 	// until the queue is empty
 
