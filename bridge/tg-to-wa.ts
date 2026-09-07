@@ -282,10 +282,28 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			const text = tgEntitiesToWa(rawText, msg.entities || msg.caption_entities).trim()
 			const dl = await downloadTgMedia(tg, msg)
 			const media = dl?.media ?? null
+			const unsupportedLabel = msg.dice
+				? 'dice'
+				: msg.venue
+				? 'venue'
+				: msg.game
+				? 'game'
+				: msg.video_chat_started || msg.video_chat_ended || msg.video_chat_participants_invited
+				? 'video chat event'
+				: null
 			if (
 				!text && !media && !msg.location && !msg.contact && !msg.poll && !msg.video_note &&
-				!msg.animation
+				!msg.animation && !unsupportedLabel
 			) {
+				return
+			}
+			if (unsupportedLabel && !text && !media) {
+				await notifyTopic(
+					tg,
+					limiter,
+					topicId,
+					`⚠️ A Telegram ${unsupportedLabel} has no WhatsApp equivalent — it didn't cross.`,
+				)
 				return
 			}
 			// A media node whose download failed (or was skipped as too large
@@ -313,6 +331,9 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 			const quoted = buildQuoted(msg, mapping.whatsapp_jid, db)
 			const waContent = await buildWaContent(text, media, msg)
 			if (!waContent) return
+			const needsTextFollowUp = !!text &&
+				(!!msg.location || !!msg.video_note ||
+					(msg.contact && !String(waContent.text || '').includes(text)))
 
 			await limiter.enqueue(async () => {
 				const sent = await bot.sock.sendMessage(
@@ -330,6 +351,9 @@ export function registerTgHandlers(tg: Bot, db: BridgeDB, limiter: RateLimiter):
 						sent.key.id,
 						JSON.stringify(sent.key),
 					)
+				}
+				if (needsTextFollowUp) {
+					await bot.sock.sendMessage(mapping.whatsapp_jid, { text })
 				}
 				db.updateLastActive(mapping.whatsapp_jid)
 			})
