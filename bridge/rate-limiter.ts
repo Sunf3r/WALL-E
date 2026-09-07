@@ -7,11 +7,11 @@
 // can be 2-3 API calls: header + sticker, content + follow-up, …).
 //
 // Flood handling: when Telegram answers 429, the failing item is retried
-// (bounded) after the server's `retry_after`, and the whole queue pauses for
-// that duration. Without this, every subsequent send also 429s (cascade) and
-// messages are silently dropped.
+// (unbounded) after the server's `retry_after`, and the whole queue pauses
+// for that duration. Delivery slows down instead of dropping info — a 429
+// never rejects. Without this, every subsequent send also 429s (cascade).
 export interface RateLimiterOptions {
-	/** Max retries of the same item after a 429. Default 5. */
+	/** Retained for compat; 429 retries are unbounded (never drop). */
 	maxRetries?: number
 	/** Cap for a single flood wait. Default 120_000 ms. */
 	maxWaitMs?: number
@@ -73,8 +73,9 @@ interface QueueItem {
 	label: string
 }
 
-// Bound the queue so a flood burst can't grow memory unbounded — callers
-// get a rejection they can surface instead of silent OOM.
+// Backpressure cap: enqueue waits for space instead of rejecting, so info
+// is slowed down but never dropped. 500 slots × Telegram spacing bounds
+// memory while a flood drains.
 const MAX_QUEUE = 500
 
 export class RateLimiter {
@@ -98,17 +99,31 @@ export class RateLimiter {
 
 	enqueue<T>(fn: () => Promise<T>, label = 'send'): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
-			if (this.queue.length >= MAX_QUEUE) {
-				reject(new Error('bridge queue is full, try again later'))
-				return
-			}
-			this.queue.push({
+			const item = {
 				fn: fn as () => Promise<unknown>,
 				resolve: resolve as (v: unknown) => void,
 				reject,
 				attempts: 0,
 				label,
-			})
+			}
+			if (this.queue.length >= MAX_QUEUE) {
+				// Full: slow the producer instead of dropping. Poll for space;
+				// drain() frees slots as floods clear.
+				console.warn(
+					`[BRIDGE] queue full (${this.queue.length}), slowing op=${label} instead of dropping`,
+				)
+				const waitForSpace = (): void => {
+					if (this.queue.length < MAX_QUEUE) {
+						this.queue.push(item)
+						void this.drain()
+					} else {
+						setTimeout(waitForSpace, 1000)
+					}
+				}
+				waitForSpace()
+				return
+			}
+			this.queue.push(item)
 			void this.drain()
 		})
 	}
@@ -135,19 +150,19 @@ export class RateLimiter {
 					this.lastRun = Date.now()
 				} catch (e) {
 					const retryAfter = getRetryAfterSeconds(e)
-					if (retryAfter !== null && item.attempts < this.maxRetries) {
+					if (retryAfter !== null) {
+						// Never drop on flood: requeue at the FRONT to preserve
+						// global FIFO order and slow the whole queue down.
 						item.attempts += 1
 						const baseMs = retryAfter > 0 ? retryAfter * 1000 : this.defaultRetryAfterMs
 						const waitMs = Math.min(baseMs + this.retryBufferMs, this.maxWaitMs)
 						this.blockedUntil = Date.now() + waitMs
-						// Requeue at the FRONT to preserve global FIFO order —
-						// later items must not overtake the failed one.
 						this.queue.unshift(item)
 						console.warn(
 							`[BRIDGE] Telegram flood control: retry after ${
 								(waitMs / 1000).toFixed(1)
 							}s ` +
-								`(attempt ${item.attempts}/${this.maxRetries}, op=${item.label}, ` +
+								`(attempt ${item.attempts}, op=${item.label}, ` +
 								`queue=${this.queue.length})`,
 						)
 					} else {
@@ -155,15 +170,7 @@ export class RateLimiter {
 						// default reaction and logs a one-line warn. Keep the queue
 						// quiet instead of dumping the full GrammyError stack.
 						if (!isReactionInvalid(e)) {
-							if (retryAfter !== null) {
-								console.error(
-									`[BRIDGE] queued ${item.label} failed: giving up after ${item.attempts} ` +
-										`flood retries, dropping it:`,
-									e,
-								)
-							} else {
-								console.error(`[BRIDGE] queued ${item.label} failed:`, e)
-							}
+							console.error(`[BRIDGE] queued ${item.label} failed:`, e)
 						}
 						this.lastRun = Date.now()
 						item.reject(e)
