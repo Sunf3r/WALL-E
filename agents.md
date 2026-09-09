@@ -35,3 +35,12 @@
 - When asked to commit, use atomic Conventional Commits: one commit per small logical change
   (`type(scope): short description`, e.g. `fix(chart): ...`). Group several files in the same commit
   only when together they implement a single thing. Never bundle unrelated changes in one commit.
+- Delegate independent workstreams and context-heavy exploration to subagents via the Task tool;
+  handle trivial or tightly-coupled work directly to avoid overhead.
+
+## Documentation rules
+
+- Before making architectural changes (new modules, data flows, runtime lifecycle, bridge topology,
+  persistence, config), read `docs/ARCHITECTURE.md` first and follow the structure it describes.
+- When your change alters anything described there, update the affected sections in the same commit
+  so the doc never drifts from the code.
