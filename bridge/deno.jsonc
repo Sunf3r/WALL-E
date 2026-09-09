@@ -13,7 +13,7 @@
 	},
 	"imports": {
 		"baileys": "npm:@whiskeysockets/baileys@7.0.0-rc14",
-		"grammy": "npm:grammy@1.36.0",
+		"grammy": "npm:grammy@1.46.0/web",
 		"@class/": "../class/",
 		"@cmd/": "../cmd/",
 		"@conf/": "../conf/",

@@ -3,12 +3,12 @@
 // Telegram throttles per-chat (roughly 1 msg/s, ~20 msg/min per group) and
 // all forum topics share the same underlying supergroup chat, so ALL
 // tg.api.* calls go through ONE global FIFO queue with `limitMs` spacing
-// between individual API calls (not per logical message — one logical send
+// between individual API calls (not per logical message - one logical send
 // can be 2-3 API calls: header + sticker, content + follow-up, …).
 //
 // Flood handling: when Telegram answers 429, the failing item is retried
 // (unbounded) after the server's `retry_after`, and the whole queue pauses
-// for that duration. Delivery slows down instead of dropping info — a 429
+// for that duration. Delivery slows down instead of dropping info - a 429
 // never rejects. Without this, every subsequent send also 429s (cascade).
 export interface RateLimiterOptions {
 	/** Retained for compat; 429 retries are unbounded (never drop). */
@@ -57,7 +57,7 @@ export function getRetryAfterSeconds(e: unknown): number | null {
 			const desc = typeof anyErr.description === 'string' ? anyErr.description : ''
 			const m = /retry after (\d+)/i.exec(desc)
 			if (m) return Number(m[1])
-			return 0 // 429 without a usable value — caller applies default wait.
+			return 0 // 429 without a usable value - caller applies default wait.
 		}
 	} catch {
 		// fall through to null

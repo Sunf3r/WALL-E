@@ -3,7 +3,7 @@
 // Telegram and WhatsApp use incompatible rich-text models:
 //   - Telegram: explicit `entities` with UTF-16 offsets (bold, italic, …).
 //   - WhatsApp: inline markers (*bold*, _italic_, ~strike~, `code`, ```pre```).
-// These converters translate between them tolerantly — anything unrecognized
+// These converters translate between them tolerantly - anything unrecognized
 // passes through as plain text rather than failing the relay.
 
 export type TgEntityType =
@@ -30,7 +30,7 @@ export function tgEntitiesToWa(text: string, entities?: any[] | null): string {
 	// the offsets of enclosing (nested) entities, so all markers are placed
 	// simultaneously. At shared boundaries closes go before opens, and among
 	// the same kind the outer (longer) marker goes first at starts / last at
-	// ends — this keeps nesting (`*aaa _bbb_ c*`) intact.
+	// ends - this keeps nesting (`*aaa _bbb_ c*`) intact.
 	interface Ins {
 		pos: number
 		mark: string
@@ -62,7 +62,7 @@ export function tgEntitiesToWa(text: string, entities?: any[] | null): string {
 				if (e.url) close = ` (${e.url})`
 				break
 			case 'blockquote':
-				// WhatsApp has no quote entity — prefix the first line. The
+				// WhatsApp has no quote entity - prefix the first line. The
 				// insertion engine only supports one open marker, so
 				// multi-line quotes degrade to a first-line prefix.
 				open = '> '

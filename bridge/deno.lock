@@ -6,7 +6,6 @@
     "jsr:@std/path@^1.1.5": "1.1.6",
     "npm:@whiskeysockets/baileys@7.0.0-rc14": "7.0.0-rc14_sharp@0.35.4",
     "npm:drizzle-orm@0.45.2": "0.45.2_postgres@3.4.9",
-    "npm:grammy@1.36.0": "1.36.0",
     "npm:humanize-duration@^3.34.0": "3.34.1",
     "npm:i18next@^26.3.6": "26.4.2",
     "npm:postgres@3.4.9": "3.4.9"
@@ -62,9 +61,6 @@
       "dependencies": [
         "tslib"
       ]
-    },
-    "@grammyjs/types@3.20.0": {
-      "integrity": "sha512-KIoikN5VTj6dcJpzMwXtouzaN3BZJ4jihBuEeXzWr25HtEfCF25V3dN11u+uNYi/9sBDvs0KCKZhyN/xFY0MBg=="
     },
     "@hapi/boom@9.1.4": {
       "integrity": "sha512-Ls1oH8jaN1vNsqcaHVYJrKmgMcKsC1wcp8bujvXrHaAqD2iDYq3HoOwsxwo09Cuda5R5nC0o0IxlrlTuvPuzSw==",
@@ -321,12 +317,6 @@
       ],
       "scripts": true
     },
-    "abort-controller@3.0.0": {
-      "integrity": "sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==",
-      "dependencies": [
-        "event-target-shim"
-      ]
-    },
     "async-mutex@0.5.0": {
       "integrity": "sha512-1A94B18jkJ3DYq284ohPxoXbfTA5HsQ7/Mf4DEhcyLx3Bz27Rh59iScbB6EPiP+B+joue6YCxcMXSbFC1tZKwA==",
       "dependencies": [
@@ -370,9 +360,6 @@
         "postgres"
       ]
     },
-    "event-target-shim@5.0.1": {
-      "integrity": "sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ=="
-    },
     "eventemitter3@5.0.4": {
       "integrity": "sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw=="
     },
@@ -383,15 +370,6 @@
         "strtok3",
         "token-types",
         "uint8array-extras"
-      ]
-    },
-    "grammy@1.36.0": {
-      "integrity": "sha512-Y1HluocfdOu1ccP9VOWnsb4Ql8A4fZS13VFRArgnC5w5JaSsQjjP+C/oDZUD/e1tRDFdJ629NiT3Mnukn7lh0w==",
-      "dependencies": [
-        "@grammyjs/types",
-        "abort-controller",
-        "debug",
-        "node-fetch"
       ]
     },
     "hashery@1.5.1": {
@@ -453,12 +431,6 @@
         "token-types",
         "uint8array-extras",
         "win-guid"
-      ]
-    },
-    "node-fetch@2.7.0": {
-      "integrity": "sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==",
-      "dependencies": [
-        "whatwg-url"
       ]
     },
     "on-exit-leak-free@2.1.2": {
@@ -606,9 +578,6 @@
         "ieee754"
       ]
     },
-    "tr46@0.0.3": {
-      "integrity": "sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw=="
-    },
     "tslib@2.8.1": {
       "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="
     },
@@ -618,18 +587,8 @@
     "undici-types@8.3.0": {
       "integrity": "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ=="
     },
-    "webidl-conversions@3.0.1": {
-      "integrity": "sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ=="
-    },
     "whatsapp-rust-bridge@0.5.4": {
       "integrity": "sha512-yYO1qSs0Fe7tGtnxOFHomocUD6IZtoAgmA4oDFyGIRZ67D3QZk3w7swA6XXFXNQngiyrg2k7tul6IrM3eUFh7A=="
-    },
-    "whatwg-url@5.0.0": {
-      "integrity": "sha512-saE57nupxk6v3HY35+jzBwYa0rKSy0XR8JSxZPwgLr7ys0IBzhGviA1/TUGJLmSVqs8pb9AnvICXEuOHLprYTw==",
-      "dependencies": [
-        "tr46",
-        "webidl-conversions"
-      ]
     },
     "win-guid@0.2.1": {
       "integrity": "sha512-gEIQU4mkgl2OPeoNrWflcJFJ3Ae2BPd4eCsHHA/XikslkIVms/nHhvnvzIZV7VLmBvtFlDOzLt9rrZT+n6D67A=="
@@ -640,8 +599,8 @@
   },
   "workspace": {
     "dependencies": [
-      "npm:@whiskeysockets/baileys@7.0.0-rc14",
-      "npm:grammy@1.36.0"
+      "jsr:@grammy/grammy@^1.36.0",
+      "npm:@whiskeysockets/baileys@7.0.0-rc14"
     ]
   }
 }

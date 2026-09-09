@@ -1,5 +1,8 @@
+// SQLite mapping store for the WA-Telegram bridge.
+// Persists chat and reply mappings at conf/gen/bridge.db.
+// Lets restarts resume relay without losing topic links.
+// Uses node:sqlite (Deno built-in compat, no npm dep) plus Deno.mkdir/stat.
 import { DatabaseSync } from 'node:sqlite'
-import { existsSync, mkdirSync } from 'node:fs'
 
 export interface MappingRow {
 	whatsapp_jid: string
@@ -54,8 +57,12 @@ export class BridgeDB {
 
 	constructor(path: string = 'conf/gen/bridge.db') {
 		const dir = path.split('/').slice(0, -1).join('/')
-		if (dir && !existsSync(dir)) {
-			mkdirSync(dir, { recursive: true })
+		if (dir) {
+			try {
+				Deno.statSync(dir)
+			} catch {
+				Deno.mkdirSync(dir, { recursive: true })
+			}
 		}
 		this.db = new DatabaseSync(path)
 		this.db.exec('PRAGMA journal_mode = WAL')
@@ -93,7 +100,7 @@ export class BridgeDB {
 			'CREATE INDEX IF NOT EXISTS idx_reply_wa ON reply_map(wa_jid, wa_msg_id)',
 		)
 		// Mirror kind for the edit path (which TG endpoint to call). ADD
-		// COLUMN is a no-op on DBs that already have it — safe to run every boot.
+		// COLUMN is a no-op on DBs that already have it - safe to run every boot.
 		const cols = this.db.prepare(`PRAGMA table_info(reply_map)`).all() as { name: string }[]
 		if (!cols.some((c) => c.name === 'tg_kind')) {
 			this.db.exec(`ALTER TABLE reply_map ADD COLUMN tg_kind TEXT NOT NULL DEFAULT 'unknown'`)
@@ -278,7 +285,7 @@ export class BridgeDB {
 
 	// In-memory echo guard for TG-initiated edits. A TG edit is forwarded to
 	// WA as a protocol MESSAGE_EDIT, and the server echoes that protocol
-	// message back as `messages.update` — without this guard the bridge
+	// message back as `messages.update` - without this guard the bridge
 	// would "edit" the TG message to the text it already has (400: message
 	// is not modified) on every TG-initiated edit. Marked synchronously
 	// before the WA send; consumed when the echo arrives. Phone-side edits
@@ -302,7 +309,7 @@ export class BridgeDB {
 
 	// In-memory echo guard for TG-initiated reactions. A TG reaction is
 	// forwarded to WA via sendMessage({react}), and the server echoes that
-	// react back as `messages.reaction` with fromMe=true — indistinguishable
+	// react back as `messages.reaction` with fromMe=true - indistinguishable
 	// from a genuine reaction made on the owner's own phone (the bridge
 	// socket IS the owner's account, so those are fromMe too). A blanket
 	// fromMe skip would drop all genuine own-phone reactions, so instead the

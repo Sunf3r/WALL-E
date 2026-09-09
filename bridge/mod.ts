@@ -3,16 +3,16 @@
 // Two ways to use it:
 //
 // 1. Embedded (normal): wa.ts calls `startBridge()` AFTER bot.connect() +
-//    loadEvents(). The bridge shares the running WhatsApp socket — no second
+//    loadEvents(). The bridge shares the running WhatsApp socket - no second
 //    connection, no auth duplication.
 // 2. Standalone helper: `deno run -A bridge/mod.ts -- --find-id` prints the
 //    supergroup ID so you can put it in conf/.env. This mode never touches
 //    WhatsApp.
-import { Bot } from 'grammy'
-import { BridgeDB } from './db.ts'
-import { RateLimiter } from './rate-limiter.ts'
 import { registerTgHandlers } from './tg-to-wa.ts'
+import { RateLimiter } from './rate-limiter.ts'
 import { attachWaRelay } from './wa-to-tg.ts'
+import { BridgeDB } from './db.ts'
+import { Bot } from 'grammy'
 
 export async function findSupergroupId(): Promise<void> {
 	const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
@@ -76,7 +76,7 @@ export function startBridge(): Bot | null {
 			maxWaitMs: envNum('RATE_LIMIT_MAX_WAIT_MS', 120_000),
 		},
 	)
-	// WhatsApp sends don't consume Telegram budget — light spacing only, so a
+	// WhatsApp sends don't consume Telegram budget - light spacing only, so a
 	// Telegram flood never stalls the TG→WA direction (and vice versa).
 	const waLimiter = new RateLimiter(envNum('WHATSAPP_RATE_LIMIT_MS', 500))
 
@@ -92,7 +92,7 @@ export function startBridge(): Bot | null {
 	//
 	// allowed_updates MUST list message_reaction explicitly: Telegram excludes
 	// it (with chat_member and message_reaction_count) from the default set,
-	// so without this the TG→WA reaction handler never fires — silently.
+	// so without this the TG→WA reaction handler never fires - silently.
 	// The bot must also be an administrator in the supergroup, otherwise
 	// Telegram withholds these updates too (checked below, non-fatal warn).
 	tg.start({
@@ -105,7 +105,7 @@ export function startBridge(): Bot | null {
 }
 
 // Parse a numeric env var with a safe fallback (unset, empty, NaN and
-// negatives all fall back — a 0/negative spacing would defeat the queue).
+// negatives all fall back - a 0/negative spacing would defeat the queue).
 function envNum(name: string, fallback: number): number {
 	const raw = Deno.env.get(name)
 	if (raw == null || raw.trim() === '') return fallback
@@ -115,7 +115,7 @@ function envNum(name: string, fallback: number): number {
 
 // Non-blocking sanity check: reacting on Telegram only reaches the bridge
 // when the bot is an admin of the supergroup. Warns once instead of failing
-// the boot — messaging works fine without it, reactions just stay silent.
+// the boot - messaging works fine without it, reactions just stay silent.
 async function checkReactionPrereqs(tg: Bot, supergroupId: string): Promise<void> {
 	try {
 		const me = await tg.api.getMe()
@@ -129,7 +129,7 @@ async function checkReactionPrereqs(tg: Bot, supergroupId: string): Promise<void
 			)
 		}
 	} catch {
-		// Prereq check failed (network, permissions) — reactions just stay silent.
+		// Prereq check failed (network, permissions) - reactions just stay silent.
 	}
 }
 
