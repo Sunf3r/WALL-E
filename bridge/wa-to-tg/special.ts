@@ -1,0 +1,126 @@
+// WhatsApp special content - locations, contacts and polls in one place.
+//
+// Telegram has native endpoints for these but no caption concept - this
+// extracts the WA payload and sends it first so text can follow as a reply,
+// degrading short polls and phoneless contacts to text before entity parsing.
+import { relayCtx, tgCall } from './state.ts'
+import { parseVcard } from '../format.ts'
+import type { proto } from 'baileys'
+import { unwrap } from './text.ts'
+
+export interface WaSpecialLocation {
+	kind: 'location'
+	latitude: number
+	longitude: number
+}
+export interface WaSpecialContact {
+	kind: 'contact'
+	name: string
+	phone: string
+}
+export interface WaSpecialPoll {
+	kind: 'poll'
+	question: string
+	options: string[]
+}
+export type WaSpecial = WaSpecialLocation | WaSpecialContact | WaSpecialPoll
+
+export function getSpecialContent(message: proto.IMessage | undefined | null): WaSpecial | null {
+	try {
+		const raw = unwrap(message)
+		if (!raw || typeof raw !== 'object') return null
+		if (raw.locationMessage) {
+			const { degreesLatitude, degreesLongitude } = raw.locationMessage
+			if (typeof degreesLatitude === 'number' && typeof degreesLongitude === 'number') {
+				return { kind: 'location', latitude: degreesLatitude, longitude: degreesLongitude }
+			}
+		}
+		if (raw.liveLocationMessage) {
+			const { latitude, longitude } = raw.liveLocationMessage
+			if (typeof latitude === 'number' && typeof longitude === 'number') {
+				return { kind: 'location', latitude, longitude }
+			}
+		}
+		if (raw.contactMessage) {
+			const { name, phone } = parseVcard(raw.contactMessage.vcard)
+			return {
+				kind: 'contact',
+				name: raw.contactMessage.displayName || name || phone || 'Contact',
+				phone,
+			}
+		}
+		if (raw.pollCreationMessage) {
+			const options = (raw.pollCreationMessage.options || [])
+				.map((o: any) => String(o?.optionName || '').trim())
+				.filter((o: string) => o.length > 0)
+			return {
+				kind: 'poll',
+				question: String(raw.pollCreationMessage.name || 'Poll'),
+				options,
+			}
+		}
+		return null
+	} catch {
+		return null
+	}
+}
+
+// Sends a location/contact/poll content message. Returns the sent Telegram
+// message id (null when the content degrades to a text fallback instead).
+export async function sendSpecial(
+	topicId: number,
+	special: WaSpecial,
+	reply:
+		| { reply_parameters: { message_id: number; allow_sending_without_reply: boolean } }
+		| undefined,
+): Promise<number | null> {
+	const { tg, supergroupId } = relayCtx
+	if (!tg) return null
+	const api = tg.api
+	const thread = { message_thread_id: topicId } as const
+	switch (special.kind) {
+		case 'location': {
+			const sent = await tgCall(() =>
+				api.sendLocation(
+					supergroupId,
+					special.latitude,
+					special.longitude,
+					{ ...thread, ...reply },
+				), 'location')
+			return sent.message_id
+		}
+		case 'contact': {
+			const sent = await tgCall(
+				() =>
+					api.sendContact(supergroupId, special.phone, special.name, {
+						...thread,
+						...reply,
+					}),
+				'contact',
+			)
+			return sent.message_id
+		}
+		case 'poll': {
+			const question = special.question.slice(0, 300) || 'Poll'
+			const options = special.options
+				.map((o) => o.slice(0, 100))
+				.filter((o) => o.length > 0)
+				.slice(0, 10)
+			// Telegram needs 2-10 options; shorter lists were already
+			// degraded to text by the caller, so this is just a guard.
+			if (options.length < 2) return null
+			const sent = await tgCall(() =>
+				api.sendPoll(
+					supergroupId,
+					question,
+					options.map((text) => ({ text })),
+					{
+						...thread,
+						is_anonymous: false,
+						...reply,
+					},
+				), 'poll')
+			return sent.message_id
+		}
+	}
+}

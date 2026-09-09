@@ -1,0 +1,119 @@
+// WhatsApp edit relay - text and caption updates in one place.
+//
+// Edits arrive as `messages.update` with editedMessage payloads while revokes
+// arrive on the same event with null message - this routes each mirror to the
+// right Telegram endpoint and skips TG-initiated echoes to avoid 400 loops.
+import { annotateMentions, getMsgText, mentionedJidsOf, phoneOf } from './text.ts'
+import { describeErr, logEditFailure, routeEdit } from './errors.ts'
+import { type proto, WAMessageStubType } from 'baileys'
+import { waMarkdownToTgEntities } from '../format.ts'
+import { relayCtx, tgCall } from './state.ts'
+import { deleteTgMirror } from './deletes.ts'
+
+// WhatsApp message edit -> Telegram edit. Edits arrive as `messages.update`
+// with `update.message.editedMessage.message` (never as upsert). "Delete for
+// everyone" revokes arrive on the SAME event with `update.message === null`
+// and `messageStubType === REVOKE` - Baileys only emits `messages.delete`
+// for local "delete for me" syncs, so revokes are handled here too. The
+// mirror message is always bot-owned, so Telegram's 48h edit window is the
+// only platform limit - but mirrors of stickers/polls/venues/contacts can't
+// be edited at all, and rows predating tg_kind fall back to try-both.
+export async function handleWaEdits(
+	updates: { key: proto.IMessageKey; update: { message?: any; messageStubType?: number } }[],
+): Promise<void> {
+	const { db, limiter, tg, supergroupId } = relayCtx
+	if (!db || !limiter || !tg) return
+
+	for (const { key, update } of updates) {
+		try {
+			// Revoke ("delete for everyone") - same event, null message.
+			if (update?.message == null && update?.messageStubType === WAMessageStubType.REVOKE) {
+				const jid = key?.remoteJid
+				const id = key?.id
+				if (!jid || !id || jid === 'status@broadcast') continue
+				// A TG-initiated edit mark is irrelevant here, but consuming
+				// it keeps the guard set from growing stale.
+				db.takeTgEdit(jid, id)
+				await deleteTgMirror(jid, id)
+				continue
+			}
+			const edited = update?.message?.editedMessage?.message
+			// Anything else (receipts, status, poll votes, ...) is not an edit -
+			// skip silently, these fire constantly.
+			if (!edited || typeof edited !== 'object') continue
+			const jid = key?.remoteJid
+			const id = key?.id
+			if (!jid || !id || jid === 'status@broadcast') {
+				continue
+			}
+			// Echo of our own TG-TO-WA edit (marked before the WA send) - the
+			// TG message already shows this text; editing would 400.
+			if (db.takeTgEdit(jid, id)) {
+				continue
+			}
+			const mapping = db.getByJid(jid)
+			if (!mapping || mapping.archived || mapping.muted) {
+				continue
+			}
+			const target = db.getByWaMsgId(id, jid)
+			if (!target) {
+				continue
+			}
+
+			const route = routeEdit((target as { tg_kind?: string }).tg_kind)
+			if (route === 'skip') {
+				continue
+			}
+
+			const isGroup = jid.endsWith('@g.us')
+			const label = key.fromMe
+				? 'You: '
+				: (isGroup ? `${phoneOf(key.participant) || 'unknown'}: ` : '')
+			const parsed = waMarkdownToTgEntities(
+				annotateMentions(
+					getMsgText(edited as proto.IMessage),
+					mentionedJidsOf(edited),
+				),
+			)
+			const body = `${label}${parsed.text}`
+			const entities = parsed.entities.map((e) => ({ ...e, offset: e.offset + label.length }))
+			const rich = entities.length > 0 ? { entities } : undefined
+
+			// Each attempt is its own limiter slot (never nested - a tgCall
+			// awaiting another tgCall would deadlock the FIFO queue).
+			try {
+				if (route === 'text' || route === 'both') {
+					await tgCall(
+						() => tg!.api.editMessageText(supergroupId, target.tg_msg_id, body, rich),
+						'edit-text',
+					)
+				} else {
+					await tgCall(() =>
+						tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
+							caption: body.slice(0, 1024) || undefined,
+						}), 'edit-caption')
+				}
+			} catch (first) {
+				// Legacy 'unknown' rows: the mirror type is a guess, so a
+				// failed text edit retries as caption before giving up.
+				if (route === 'both') {
+					try {
+						await tgCall(
+							() =>
+								tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
+									caption: body.slice(0, 1024) || undefined,
+								}),
+							'edit-caption',
+						)
+					} catch (second) {
+						logEditFailure(target.tg_msg_id, second, String(describeErr(first)))
+					}
+				} else {
+					logEditFailure(target.tg_msg_id, first)
+				}
+			}
+		} catch (e) {
+			console.error('[BRIDGE] failed to relay one WA edit:', e)
+		}
+	}
+}

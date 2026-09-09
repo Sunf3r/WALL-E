@@ -1,0 +1,133 @@
+// Telegram message handler - main TG->WA relay path.
+// Reaction and edit handlers live in handler-events.ts.
+import { notifyTopic, shortErr, tgDownloadFailureLine } from './replies.ts'
+import { buildQuoted, buildWaContent } from './content.ts'
+import type { RateLimiter } from '../rate-limiter.ts'
+import { bufferTgAlbumItem } from './album.ts'
+import { tgEntitiesToWa } from '../format.ts'
+import { downloadTgMedia } from './media.ts'
+import type { BridgeDB } from '../db.ts'
+import type { Bot } from 'grammy'
+import bot from '@plugin/bot.ts'
+
+type WaSend = <T>(fn: () => Promise<T>) => Promise<T>
+
+export function registerTgMessageHandler(
+	tg: Bot,
+	db: BridgeDB,
+	tgLimiter: RateLimiter,
+	waSend: WaSend,
+	supergroupId: string,
+): void {
+	const mutedNoticeAt = new Map<number, number>()
+	tg.on('message', async (ctx) => {
+		try {
+			const msg: any = ctx.msg
+			if (String(ctx.chat.id) !== supergroupId || msg.from?.is_bot) return
+			const topicId = msg.message_thread_id
+			if (!topicId) return
+			const mapping = db.getByTopicId(topicId)
+			if (!mapping || mapping.archived || mapping.muted) {
+				const last = mutedNoticeAt.get(topicId) ?? 0
+				if (Date.now() - last > 3_600_000) {
+					mutedNoticeAt.set(topicId, Date.now())
+					const line = !mapping || mapping.archived
+						? '⚠️ This chat is archived - relay is paused. Use /reopen to resume.'
+						: '⚠️ This chat is muted - relay is paused. Use /unmute to resume.'
+					await notifyTopic(tg, tgLimiter, topicId, line)
+				}
+				return
+			}
+			const rawText = msg.text || msg.caption || ''
+			const text = tgEntitiesToWa(rawText, msg.entities || msg.caption_entities).trim()
+			const dl = await downloadTgMedia(tg, msg)
+			const media = dl?.media ?? null
+			const unsupportedLabel = msg.dice
+				? 'dice'
+				: msg.venue
+				? 'venue'
+				: msg.game
+				? 'game'
+				: msg.video_chat_started || msg.video_chat_ended ||
+						msg.video_chat_participants_invited
+				? 'video chat event'
+				: null
+			if (
+				!text && !media && !msg.location && !msg.contact && !msg.poll && !msg.video_note &&
+				!msg.animation && !unsupportedLabel
+			) return
+			if (unsupportedLabel && !text && !media) {
+				await notifyTopic(
+					tg,
+					tgLimiter,
+					topicId,
+					`⚠️ A Telegram ${unsupportedLabel} has no WhatsApp equivalent - it didn't cross.`,
+				)
+				return
+			}
+			if (dl && !dl.media) {
+				await notifyTopic(
+					tg,
+					tgLimiter,
+					topicId,
+					tgDownloadFailureLine(dl.label, dl.bytes, dl.tooLarge),
+				)
+				if (!text) return
+			}
+			const groupId = msg.media_group_id as string | undefined
+			if (groupId && media && (media.kind === 'image' || media.kind === 'video')) {
+				bufferTgAlbumItem(groupId, { msg, topicId, text, media }, {
+					db,
+					tg,
+					tgLimiter,
+					waSend,
+				})
+				return
+			}
+			const quoted = buildQuoted(msg, mapping.whatsapp_jid, db)
+			let textForWa = text
+			if (!quoted && msg.reply_to_message) {
+				const author = msg.reply_to_message.from?.first_name ||
+					msg.reply_to_message.from?.username || 'user'
+				const preview = (msg.reply_to_message.text || msg.reply_to_message.caption || '')
+					.slice(0, 200)
+				if (preview) textForWa = `↩️ ${author}: ${preview}\n${text}`.trim()
+			}
+			const waContent = await buildWaContent(textForWa, media, msg)
+			if (!waContent) return
+			const needsTextFollowUp = !!textForWa &&
+				(!!msg.location || !!msg.video_note ||
+					(msg.contact && !String(waContent.text || '').includes(textForWa)))
+			await waSend(async () => {
+				const sent = await bot.sock.sendMessage(
+					mapping.whatsapp_jid,
+					waContent,
+					quoted ? { quoted } : undefined,
+				)
+				if (sent?.key?.id) {
+					db.saveReplyMap(
+						msg.message_id,
+						mapping.whatsapp_jid,
+						sent.key.id,
+						JSON.stringify(sent.key),
+					)
+				}
+				if (needsTextFollowUp) {
+					await bot.sock.sendMessage(mapping.whatsapp_jid, { text: textForWa })
+				}
+				db.updateLastActive(mapping.whatsapp_jid)
+			})
+		} catch (e) {
+			console.error('[BRIDGE] TG->WA relay failed:', e)
+			const topicId = (ctx.msg as any)?.message_thread_id
+			if (topicId) {
+				await notifyTopic(
+					tg,
+					tgLimiter,
+					topicId,
+					`⚠️ Couldn't send to WhatsApp: ${shortErr(e)}`,
+				)
+			}
+		}
+	})
+}
