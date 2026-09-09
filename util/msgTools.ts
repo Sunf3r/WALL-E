@@ -1,7 +1,9 @@
-import { downloadMediaMessage, type proto } from 'baileys'
+// msgTools - message helpers for ctx, media and quotes
+// - provides getCtx, downloadMedia and orphan quote rescue
 import { findCachedOriginal, savePendingQuote } from '@plugin/deletedStore.ts'
 import { type CmdCtx, type Msg, type MsgTypes } from '@conf/types/types.d.ts'
 import { allMsgTypes, coolValues, isMedia } from '@conf/types/msgs.ts'
+import { downloadMediaMessage, type proto } from 'baileys'
 import { msgs, users } from '@conf/schema.ts'
 import { findKey } from '@util/functions.ts'
 import { db, getGroup, getUser } from '@db'

@@ -1,3 +1,5 @@
+// weather - Open-Meteo fetch with campus coords
+// - maps WMO codes to text and builds tip line
 import defaults from '@conf/defaults.json' with { type: 'json' }
 
 export interface WeatherReport {

@@ -1,3 +1,5 @@
+// calendarAnalytics - classify calendar events for today view
+// - splits into new, ending, ongoing and builds summary text
 import { areDuplicateActivities, CalendarEvent } from '@plugin/calendarParser.ts'
 
 export interface ClassifiedCalendar {

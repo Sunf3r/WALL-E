@@ -1,3 +1,5 @@
+// bulletinTitles - non-repeating shuffled bulletin titles
+// - persists shuffled order and index in JSON state file
 import titlesList from '@conf/bulletinTitles.json' with { type: 'json' }
 
 interface TitleState {

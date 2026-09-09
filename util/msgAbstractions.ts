@@ -1,3 +1,5 @@
+// msgAbstractions - Baileys send, react and typing touchpoint
+// - wraps sendMsg with media cache lookup and locale templates
 import { type CmdCtx, type Msg } from '@conf/types/types.d.ts'
 import { downloadMedia } from '@util/msgTools.ts'
 import type { AnyMessageContent } from 'baileys'

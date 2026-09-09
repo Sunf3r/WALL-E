@@ -1,3 +1,5 @@
+// menuParser - parse RU HTML menu into structured meals
+// - extracts breakfast, lunch, dinner plus rawBlock text
 export interface MealDetails {
 	mainDish?: string
 	optionDish?: string
@@ -44,9 +46,9 @@ const titles = [
 ]
 
 const Hours: Record<string, string> = {
-	'CAFÉ DA MANHÃ': '7h – 8h',
-	ALMOÇO: '11h – 13h30',
-	JANTAR: '17h – 19h',
+	'CAFÉ DA MANHÃ': '7h - 8h',
+	ALMOÇO: '11h - 13h30',
+	JANTAR: '17h - 19h',
 }
 
 const MealEmojis: Record<string, string> = {
@@ -125,7 +127,7 @@ export function parseMenuHtml(html: string): ParsedMenuResult {
 			}
 
 			const rawBlock = `> ${MealEmojis[meal] || '☕'} *Café da Manhã (${
-				Hours[meal] || '7h – 8h'
+				Hours[meal] || '7h - 8h'
 			})*\n• ${items.join(', ')}`
 			result.breakfast = { fruit, juice, bread, milk, coffee, items, rawBlock }
 			blocks.push(rawBlock)
