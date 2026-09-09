@@ -183,17 +183,18 @@ async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 			if (!text && !media && !special) {
 				// A media node whose download failed would otherwise vanish
 				// silently — tell the topic what exactly didn't cross, with
-				// its kind and size when the node advertised them.
+				// its kind and size when the node advertised them. Anything
+				// else names the raw WhatsApp type plus a content preview so
+				// the topic shows WHAT didn't cross, not just that something
+				// didn't (see waUnsupportedLine).
 				if (topicId !== null) {
-					const rawNode: any = unwrap(m.message)
-					const albumFallback = rawNode?.albumMessage ? 'album' : null
-					const label = dl?.label ?? albumFallback ?? 'message'
-					await notifyTopic(
-						topicId,
-						dl
-							? waDownloadFailureLine(dl.label, dl.bytes)
-							: `⚠️ A WhatsApp ${label} has no Telegram equivalent — it didn't cross.`,
-					)
+					if (dl) {
+						await notifyTopic(topicId, waDownloadFailureLine(dl.label, dl.bytes))
+					} else {
+						const line = waUnsupportedLine(m, senderName)
+						console.warn(`[BRIDGE] unsupported WA message: ${line}`)
+						await notifyTopic(topicId, line)
+					}
 				}
 				continue
 			}
@@ -1523,6 +1524,238 @@ export function waBytes(v: unknown): number | null {
 export function waDownloadFailureLine(label: string, bytes: number | null): string {
 	const size = bytes != null ? ` (${formatBytes(bytes)})` : ''
 	return `⚠️ Couldn't download a WhatsApp ${label}${size} — it didn't cross.`
+}
+
+// Friendly names for WhatsApp content types that reach the "no Telegram
+// equivalent" branch (i.e. no text, no downloadable media, no
+// location/contact/poll). Raw proto keys stay in the notice in parentheses
+// so new/renamed types can be reported precisely.
+const WA_UNSUPPORTED_FRIENDLY: Record<string, string> = {
+	albumMessage: 'album',
+	pollUpdateMessage: 'poll vote',
+	pollCreationMessageV3: 'poll',
+	pollResultSnapshotMessage: 'poll results',
+	contactsArrayMessage: 'contact list',
+	groupInviteMessage: 'group invite',
+	buttonsMessage: 'interactive message',
+	buttonsResponseMessage: 'button reply',
+	templateMessage: 'template message',
+	templateButtonReplyMessage: 'template reply',
+	listMessage: 'list message',
+	listResponseMessage: 'list reply',
+	interactiveMessage: 'interactive message',
+	interactiveResponseMessage: 'interactive reply',
+	nativeFlowResponseMessage: 'interactive reply',
+	eventMessage: 'event',
+	eventResponseMessage: 'event response',
+	pinInChatMessage: 'pinned message',
+	keepInChatMessage: 'kept message',
+	callLogMessage: 'call log',
+	scheduledCallCreationMessage: 'scheduled call',
+	scheduledCallEditMessage: 'scheduled call update',
+	productMessage: 'product',
+	orderMessage: 'order',
+	invoiceMessage: 'invoice',
+	paymentInviteMessage: 'payment invite',
+	requestPaymentMessage: 'payment request',
+	stickerPackMessage: 'sticker pack',
+	newsletterAdminInviteMessage: 'channel invite',
+	highlyStructuredMessage: 'template message',
+	requestPhoneNumberMessage: 'phone-number request',
+	messageHistoryBundle: 'history bundle',
+	placeholderMessage: 'placeholder',
+	senderKeyDistributionMessage: 'encryption setup',
+}
+
+// Envelope/metadata keys that are never the "real" content type. Baileys
+// messages almost always carry messageContextInfo alongside the payload, so
+// the descriptor must skip it instead of reporting it.
+const WA_ENVELOPE_KEYS = new Set(['messageContextInfo', 'senderKeyDistributionMessage'])
+
+function truncateOneLine(v: unknown, max = 200): string | null {
+	if (typeof v !== 'string') return null
+	const oneLine = v.replace(/\s+/g, ' ').trim()
+	if (!oneLine) return null
+	return oneLine.length > max ? oneLine.slice(0, max) + '…' : oneLine
+}
+
+function firstString(node: any, keys: string[], max = 200): string | null {
+	if (!node || typeof node !== 'object') return null
+	for (const k of keys) {
+		const hit = truncateOneLine(node[k], max)
+		if (hit) return hit
+	}
+	return null
+}
+
+// Best-effort human preview of an unsupported node's CONTENT (never the
+// quoted subtree — that belongs to another message). Each branch only reads
+// plain string/number fields, so exotic shapes safely fall through to the
+// generic string scan at the end.
+function previewUnsupportedContent(primary: string, node: any): string | null {
+	try {
+		if (!node || typeof node !== 'object') return null
+		switch (primary) {
+			case 'pollUpdateMessage': {
+				const votes = node.vote?.selectedOptions
+				if (Array.isArray(votes)) {
+					const names = votes
+						.map((o: any) => String(o?.name ?? o?.optionName ?? '').trim())
+						.filter(Boolean)
+					if (names.length > 0) return truncateOneLine(`voted: ${names.join(', ')}`)
+				}
+				return firstString(node.vote ?? node, ['name', 'optionName'])
+			}
+			case 'pollCreationMessage':
+			case 'pollCreationMessageV3': {
+				const q = truncateOneLine(node.name, 120)
+				const opts = Array.isArray(node.options)
+					? node.options
+						.map((o: any) => String(o?.optionName ?? '').trim())
+						.filter(Boolean)
+					: []
+				if (q && opts.length > 0) return `${q} (${opts.slice(0, 5).join(' / ')})`
+				return q ?? (opts.length > 0 ? truncateOneLine(opts.slice(0, 5).join(' / ')) : null)
+			}
+			case 'pollResultSnapshotMessage':
+				return truncateOneLine(node.name, 160)
+			case 'albumMessage':
+				return firstString(node, ['caption'])
+			case 'contactsArrayMessage': {
+				const list = Array.isArray(node.contacts) ? node.contacts : []
+				const names = list
+					.map((c: any) => String(c?.displayName ?? '').trim())
+					.filter(Boolean)
+					.slice(0, 3)
+				return truncateOneLine(
+					`${list.length} contact${list.length === 1 ? '' : 's'}${
+						names.length > 0 ? `: ${names.join(', ')}` : ''
+					}`,
+				)
+			}
+			case 'groupInviteMessage':
+				return firstString(node, ['groupName', 'caption']) ??
+					truncateOneLine(
+						[node.groupName, node.inviteCode ? `code ${node.inviteCode}` : null]
+							.filter(Boolean)
+							.join(' '),
+					)
+			case 'buttonsMessage':
+			case 'templateMessage':
+			case 'interactiveMessage':
+			case 'listMessage':
+				return firstString(node, [
+					'contentText',
+					'title',
+					'description',
+					'text',
+					'caption',
+					'footerText',
+				])
+			case 'buttonsResponseMessage':
+				return firstString(node, ['selectedDisplayText', 'selectedButtonId'])
+			case 'templateButtonReplyMessage':
+				return firstString(node, ['selectedDisplayText', 'selectedId', 'selectedIndex'])
+			case 'listResponseMessage':
+				return firstString(node, ['title', 'description']) ??
+					firstString(node.singleSelectReply ?? {}, ['selectedRowId'])
+			case 'interactiveResponseMessage':
+			case 'nativeFlowResponseMessage':
+				return firstString(node, ['body', 'title']) ??
+					firstString(node.nativeFlowResponseMessage ?? {}, ['name', 'paramsJson'])
+			case 'eventMessage':
+				return firstString(node, ['name', 'description', 'location']) ??
+					(typeof node.startTime === 'number' ? `starts ${node.startTime}` : null)
+			case 'eventResponseMessage':
+				return firstString(node, ['eventName']) ??
+					(typeof node.response === 'string'
+						? truncateOneLine(`response ${node.response}`)
+						: null)
+			case 'pinInChatMessage':
+				return truncateOneLine(`type ${String(node.type ?? 'unknown')}`)
+			case 'callLogMessage':
+				return firstString(node, ['displayName']) ??
+					(typeof node.duration === 'number'
+						? truncateOneLine(`duration ${node.duration}s`)
+						: null)
+			case 'scheduledCallCreationMessage':
+			case 'scheduledCallEditMessage':
+				return firstString(node, ['scheduledCallName', 'title'])
+			case 'productMessage':
+			case 'orderMessage':
+			case 'invoiceMessage':
+				return firstString(node, ['title', 'description', 'currencyCode'])
+			case 'stickerPackMessage':
+				return firstString(node, ['name', 'stickerPackId'])
+			case 'newsletterAdminInviteMessage':
+				return firstString(node, ['newsletterName', 'caption'])
+			case 'highlyStructuredMessage':
+				return firstString(node, ['namespace', 'templateId']) ??
+					firstString(node.params ?? {}, ['fallbackLg', 'fallbackLc'])
+			default: {
+				// Generic last resort: first short human-looking string field
+				// on the node (skips ids/keys/hashes by length and shape).
+				for (const [k, v] of Object.entries(node)) {
+					if (k === 'contextInfo' || k === 'quotedMessage') continue
+					if (
+						typeof v === 'string' && v.trim().length >= 2 && v.length <= 300 &&
+						!/^[A-Za-z0-9+/=]{32,}$/.test(v)
+					) {
+						const hit = truncateOneLine(v)
+						if (hit) return hit
+					}
+				}
+				return null
+			}
+		}
+	} catch {
+		return null
+	}
+}
+
+// Topic + log line for a WhatsApp message with no Telegram equivalent.
+// Names the FRIENDLY type ("poll vote"), keeps the raw proto key
+// ("pollUpdateMessage") for precise reports, adds the sender + WA id when
+// known, and appends a one-line content preview when one can be extracted:
+//
+//   ⚠️ A WhatsApp poll vote (pollUpdateMessage) from Alice has no Telegram
+//   equivalent — it didn't cross. (#3A1F…)
+//   > voted: Option B
+export function waUnsupportedLine(m: proto.IWebMessageInfo, senderName?: string | null): string {
+	try {
+		let raw: any = null
+		try {
+			raw = unwrap(m?.message)
+		} catch {
+			raw = null
+		}
+		// deviceSentMessage wraps phone-sent messages from a linked device;
+		// the outer key is just an envelope around the real content.
+		if (raw?.deviceSentMessage?.message && typeof raw.deviceSentMessage.message === 'object') {
+			raw = raw.deviceSentMessage.message
+		}
+		const keys: string[] = raw && typeof raw === 'object' ? Object.keys(raw) : []
+		const contentKeys = keys.filter((k) => !WA_ENVELOPE_KEYS.has(k))
+		const primary = contentKeys[0] ?? keys[0] ?? 'unknownMessage'
+		const node = raw?.[primary]
+		const friendly = WA_UNSUPPORTED_FRIENDLY[primary] ??
+			(primary.endsWith('Message')
+				? primary.slice(0, -7).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() ||
+					'message'
+				: primary)
+		const detail = previewUnsupportedContent(primary, node)
+		const from = senderName && senderName.trim()
+			? ` from ${senderName.trim().slice(0, 60)}`
+			: ''
+		const id = typeof m?.key?.id === 'string' && m.key.id.length > 0
+			? ` (#${m.key.id.length > 10 ? '…' + m.key.id.slice(-6) : m.key.id})`
+			: ''
+		const head =
+			`⚠️ A WhatsApp ${friendly} (${primary})${from} has no Telegram equivalent — it didn't cross.${id}`
+		return detail ? `${head}\n> ${detail}` : head
+	} catch {
+		return `⚠️ A WhatsApp message has no Telegram equivalent — it didn't cross.`
+	}
 }
 
 async function downloadWaMedia(m: proto.IWebMessageInfo): Promise<WaDownload | null> {
