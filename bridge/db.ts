@@ -118,6 +118,15 @@ export class BridgeDB {
 		if (!mapCols.some((c) => c.name === 'muted')) {
 			this.db.exec(`ALTER TABLE mappings ADD COLUMN muted INTEGER NOT NULL DEFAULT 0`)
 		}
+		// JID aliases: one contact can arrive as @lid or @s.whatsapp.net.
+		// The alias table maps every seen variant to the canonical JID so
+		// both variants resolve to the same topic instead of splitting.
+		this.db.exec(`
+			CREATE TABLE IF NOT EXISTS jid_aliases (
+				alias TEXT PRIMARY KEY,
+				canonical TEXT NOT NULL
+			)
+		`)
 	}
 
 	close(): void {
@@ -182,6 +191,55 @@ export class BridgeDB {
 			| undefined
 		if (!row) return undefined
 		return toMapping(row)
+	}
+
+	// Alias-aware lookup: resolves @lid/@s.whatsapp.net variants to the
+	// canonical mapping so one contact never gets two topics.
+	getByJidOrAlias(jid: string): MappingRow | undefined {
+		const direct = this.getByJid(jid)
+		if (direct) return direct
+		try {
+			const link = this.db.prepare('SELECT canonical FROM jid_aliases WHERE alias = ?').get(
+				jid,
+			) as { canonical?: unknown } | undefined
+			const canonical = typeof link?.canonical === 'string' ? link.canonical : null
+			if (canonical && canonical !== jid) return this.getByJid(canonical)
+		} catch {
+			// Alias table missing on very old DBs before init() - direct miss.
+		}
+		return undefined
+	}
+
+	// Remember that an alias JID means the same chat as the canonical one.
+	addAlias(alias: string, canonical: string): void {
+		if (!alias || !canonical || alias === canonical) return
+		try {
+			this.db.prepare(
+				'INSERT OR REPLACE INTO jid_aliases (alias, canonical) VALUES (?, ?)',
+			).run(alias, canonical)
+		} catch {
+			// Best effort - a missing alias only risks a future dupe topic.
+		}
+	}
+
+	// Move reply_map rows when a chat heals from an alias onto canonical.
+	repointReplies(fromJid: string, toJid: string): void {
+		if (!fromJid || !toJid || fromJid === toJid) return
+		try {
+			this.db.prepare('UPDATE reply_map SET wa_jid = ? WHERE wa_jid = ?').run(toJid, fromJid)
+		} catch {
+			// Best effort - stale rows just miss quote resolution.
+		}
+	}
+
+	// Alias-aware reverse lookup: tries the canonical JID plus every known
+	// variant, so quotes/edits/deletes resolve even for pre-migration rows.
+	getByWaMsgIdAny(waMsgId: string, jids: string[]): ReplyMapRow | undefined {
+		for (const jid of [...new Set(jids.filter(Boolean))]) {
+			const row = this.getByWaMsgId(waMsgId, jid)
+			if (row) return row
+		}
+		return undefined
 	}
 
 	getByTopicId(topicId: number): MappingRow | undefined {

@@ -50,10 +50,11 @@ export function resolveQuoteTarget(
 	jid: string,
 	m: proto.IWebMessageInfo,
 	displayName: string,
+	aliases: string[] = [],
 ): { replyToTgId: number | null; quoteHeader: string | null } {
 	const quote = getQuoteInfo(m, displayName)
 	if (!quote) return { replyToTgId: null, quoteHeader: null }
-	const target = db.getByWaMsgId(quote.stanzaId, jid)
+	const target = db.getByWaMsgIdAny(quote.stanzaId, [jid, ...aliases])
 	if (target) return { replyToTgId: target.tg_msg_id, quoteHeader: null }
 	return { replyToTgId: null, quoteHeader: `↩️ ${quote.author}: ${quote.preview}` }
 }

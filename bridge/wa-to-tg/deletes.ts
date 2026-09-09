@@ -6,6 +6,7 @@
 // stored.
 import { STORED_TEXT_MAX } from './media-utils.ts'
 import { logDeleteFailure } from './errors.ts'
+import { candidatesOf } from './jid.ts'
 import { relayCtx, tgCall } from './state.ts'
 import type { TgEntity } from '../format.ts'
 import type { ReplyMapRow } from '../db.ts'
@@ -28,9 +29,13 @@ export async function handleWaDeletes(
 	for (const key of payload.keys) {
 		try {
 			const id = key?.id
-			const jid = key?.remoteJid
-			if (!id || !jid || jid === 'status@broadcast') continue
-			await deleteTgMirror(jid, id)
+			if (!id || !key?.remoteJid || key.remoteJid === 'status@broadcast') continue
+			const cands = candidatesOf(key)
+			const mapping = cands.map((c) => db.getByJidOrAlias(c)).find((m) =>
+				m && !m.archived && !m.muted
+			)
+			if (!mapping) continue
+			await deleteTgMirror(mapping.whatsapp_jid, id, cands)
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA delete:', e)
 		}
@@ -104,12 +109,16 @@ export async function spoilerTgMirror(target: ReplyMapRow): Promise<boolean> {
 // without stored content (TG-originated rows, stickers, specials) or failed
 // spoiler edits are actually deleted. Drops the reply_map row when the
 // message ends up deleted so later edits/reactions to it don't 400.
-export async function deleteTgMirror(jid: string, id: string): Promise<void> {
+export async function deleteTgMirror(
+	jid: string,
+	id: string,
+	aliases: string[] = [],
+): Promise<void> {
 	const { db, limiter, tg, supergroupId } = relayCtx
 	if (!db || !limiter || !tg) return
-	const mapping = db.getByJid(jid)
+	const mapping = db.getByJidOrAlias(jid)
 	if (!mapping || mapping.archived || mapping.muted) return
-	const target = db.getByWaMsgId(id, jid)
+	const target = db.getByWaMsgIdAny(id, [mapping.whatsapp_jid, jid, ...aliases])
 	if (!target) {
 		return
 	}

@@ -111,7 +111,7 @@ export function registerTgCommands(
 				return
 			}
 			const jid = `${digits}@s.whatsapp.net`
-			const existing = db.getByJid(jid)
+			const existing = db.getByJidOrAlias(jid)
 			if (existing && !existing.archived) {
 				await ctx.reply(
 					`+${digits} is already bridged in topic #${existing.telegram_topic_id}.`,
@@ -126,6 +126,15 @@ export function registerTgCommands(
 			if (!info?.exists) {
 				await ctx.reply(`No WhatsApp account found for +${digits}.`)
 				return
+			}
+			// The server may address this contact under a LID elsewhere -
+			// remember the verified JID as an alias of the canonical PN.
+			try {
+				const { normalizeJid } = await import('../wa-to-tg/jid.ts')
+				const verified = normalizeJid((info as { jid?: string }).jid)
+				if (verified) db.addAlias(verified, jid)
+			} catch {
+				// Best effort - the WA side heals the alias on first sight.
 			}
 			const name = (args.slice(1).join(' ') || `+${digits}`).replace(/[\n\r]+/g, ' ').trim()
 				.slice(0, 128) || `+${digits}`

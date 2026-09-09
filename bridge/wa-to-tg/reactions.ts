@@ -4,6 +4,7 @@
 // last-writer-wins by design - this normalizes WA emojis for Telegram, skips
 // TG-initiated echoes and retries REACTION_INVALID with the default heart.
 import { reactionErrorDescription } from './errors.ts'
+import { candidatesOf } from './jid.ts'
 import { relayCtx, tgCall } from './state.ts'
 import type { proto } from 'baileys'
 
@@ -70,13 +71,15 @@ export async function handleWaReactions(
 	for (const { key, reaction } of reactions) {
 		try {
 			const targetId = key?.id
-			const jid = key?.remoteJid
-			if (!targetId || !jid || jid === 'status@broadcast') continue
-			const mapping = db.getByJid(jid)
-			if (!mapping || mapping.archived || mapping.muted) continue
+			if (!targetId || !key?.remoteJid || key.remoteJid === 'status@broadcast') continue
+			const cands = candidatesOf(key)
+			const mapping = cands.map((c) => db.getByJidOrAlias(c)).find((m) =>
+				m && !m.archived && !m.muted
+			)
+			if (!mapping) continue
 			// Unmapped targets (pre-bridge history, pruned) can't be quoted
 			// by Telegram - nothing to attach the reaction to.
-			const target = db.getByWaMsgId(targetId, jid)
+			const target = db.getByWaMsgIdAny(targetId, [mapping.whatsapp_jid, ...cands])
 			if (!target) {
 				continue
 			}
@@ -88,7 +91,8 @@ export async function handleWaReactions(
 			// owner's account, so genuine reactions made on the owner's phone
 			// arrive with fromMe=true too - skipping those would drop every
 			// own-phone reaction silently (only the marked echo is skipped).
-			if (db.takeTgReact(jid, targetId, emoji || '')) {
+			// The mark uses the reply_map row JID, so consume it the same way.
+			if (db.takeTgReact(target.wa_jid, targetId, emoji || '')) {
 				continue
 			}
 			const payload = emoji ? [{ type: 'emoji' as const, emoji }] : []

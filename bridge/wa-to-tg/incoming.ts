@@ -6,9 +6,11 @@
 // chat/quote/unsupported helpers so this loop stays small.
 import { annotateMentions, getMentionedJids, getMsgText, phoneOf } from './text.ts'
 import { bufferAlbumItem, flushPendingAlbums } from './album-flush.ts'
-import { ensureTopicMapping, resolveChatName } from './chat.ts'
+import { ensureTopicMapping } from './topics.ts'
+import { resolveChatName } from './chat.ts'
 import { notifyTopic, relayCtx, shortErr } from './state.ts'
 import { waMarkdownToTgEntities } from '../format.ts'
+import { canonicalChatJid } from './jid.ts'
 import { notifyEmptyRelay } from './unsupported.ts'
 import { getSpecialContent } from './special.ts'
 import { resolveQuoteTarget } from './quote.ts'
@@ -35,23 +37,32 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 			if (findKey(m.message, 'protocolMessage')) continue
 			if (findKey(m.message, 'reactionMessage')) continue
 
-			const jid = m.key.remoteJid
-			if (!jid || jid === 'status@broadcast') continue
+			const rawJid = m.key.remoteJid
+			if (!rawJid || rawJid === 'status@broadcast') continue
+			// Canonicalize LID/PN variants to one chat before any mapping
+			// lookup, so one person never splits across two topics.
+			const { canonical: jid, aliases } = await canonicalChatJid(m.key)
+			if (!jid) continue
 			// Own messages: TG-TO-WA sends re-emit here with fromMe=true. Those
 			// are already in reply_map, so skip them - but messages sent from
 			// the phone/client are new (unmapped) and mirror with a `You:`
 			// label. The map check doubles as redelivery dedupe.
-			const echo = m.key.fromMe && !!m.key.id && !!db.getByWaMsgId(m.key.id, jid)
+			const echo = m.key.fromMe && !!m.key.id &&
+				!!db.getByWaMsgIdAny(m.key.id, [jid, ...aliases])
 			if (echo) continue
 			const isGroup = jid.endsWith('@g.us')
 			const chatType: '1:1' | 'group' = isGroup ? 'group' : '1:1'
+			const fromMe = !!m.key.fromMe
 
-			const displayName = await resolveChatName(jid, m.pushName, isGroup)
+			const displayName = await resolveChatName(jid, m.pushName, isGroup, fromMe)
 			const senderName = m.key.fromMe
 				? 'You'
 				: (isGroup ? (m.pushName || phoneOf(m.key.participant) || 'unknown') : displayName)
 
-			const ensured = await ensureTopicMapping(jid, displayName, chatType, isGroup)
+			const ensured = await ensureTopicMapping(jid, displayName, chatType, isGroup, {
+				canRename: !fromMe,
+				aliases,
+			})
 			if (!ensured) continue
 			topicId = ensured.topicId
 			// Local number-typed alias: the outer topicId stays nullable for
@@ -80,7 +91,13 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 			}
 
 			// WhatsApp quote -> Telegram reply via shared helper.
-			const { replyToTgId, quoteHeader } = resolveQuoteTarget(db, jid, m, displayName)
+			const { replyToTgId, quoteHeader } = resolveQuoteTarget(
+				db,
+				jid,
+				m,
+				displayName,
+				aliases,
+			)
 
 			const label = m.key.fromMe ? 'You: ' : (isGroup ? `${senderName}: ` : '')
 			// WhatsApp inline markers -> Telegram entities. The sender label

@@ -49,7 +49,7 @@ bridge/                  # WA<->TG bridge (own deno.jsonc, facades + 2 module di
   bridge/format.ts       # TG entities <-> WA markdown converters
   bridge/rate-limiter.ts # FIFO flood gate with 429 retry
   bridge/wa-to-tg.ts     # facade re-exporting wa-to-tg/
-  bridge/wa-to-tg/       # 19 modules: relay, state, incoming, chat, text, media,
+  bridge/wa-to-tg/       # 21 modules: relay, state, incoming, chat, topics, jid, text, media,
                          # media-utils, send, send-media, quote, album, album-flush,
                          # edits, deletes, reactions, special, unsupported,
                          # unsupported-preview, errors
@@ -341,10 +341,13 @@ and `connection/update.ts` calls `reattachBridge()` after every reconnect. Missi
 - `rate-limiter.ts`: one global FIFO queue per limiter; every `tg.api.*` call takes a slot; 429s
   retry unbounded (front-requeue, `retry_after + 500ms`, max 120s) so nothing is dropped; queue over
   500 applies producer backpressure.
-- WA->TG (`wa-to-tg.ts` facade + 19 modules): `relay.ts` attaches six socket listeners;
+- WA->TG (`wa-to-tg.ts` facade + 21 modules): `relay.ts` attaches six socket listeners;
   `incoming.ts` is the main loop (skip protocol/reaction/status, echo-dedupe via `reply_map`,
-  resolve/create topic, mentions, media download, special-content degrade, quote resolve, album
-  buffer-or-send); `chat.ts` owns topic create/rename; `text.ts` unwrap + `@Name (+phone)`
+  canonicalize LID/PN via `jid.ts`, resolve/create topic, mentions, media download, special-content
+  degrade, quote resolve, album buffer-or-send); `chat.ts` owns name resolution (own pushName
+  ignored for outgoing 1:1) and topic creation; `topics.ts` owns the mapping ensure (per-JID
+  in-flight lock, LID/PN alias healing, outgoing never renames, 1:1 renames update the forum title);
+  `db.ts` `jid_aliases` maps every variant to the canonical JID; `text.ts` unwrap + `@Name (+phone)`
   annotation; `media.ts`/`media-utils.ts` download + size/ext; `send.ts`/`send-media.ts` route by
   kind (photo/video/animation/voice/audio/sticker/document, 1024-char caption overflow follow-ups,
   round video-note fallback); `quote.ts` reply-target or `author: preview` header;

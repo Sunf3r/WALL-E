@@ -1,0 +1,96 @@
+// Topic mapping ensure - one chat, one forum topic, in one place.
+//
+// Concurrent upserts for the same new chat await the in-flight creation
+// instead of opening a second topic. LID/PN variants heal onto the
+// canonical JID (keeping the existing topic), outgoing messages never
+// rename, and real contact renames update the Telegram topic title too.
+import { createForumTopic } from './chat.ts'
+import { inflightTopics, relayCtx, tgCall } from './state.ts'
+
+// Ensure a forum topic mapping exists - creates or refreshes it, updates
+// activity and returns null when muted so the caller skips silently.
+// `canRename` is false for outgoing (fromMe) messages so our own pushName
+// never clobbers the contact name; `aliases` registers every seen LID/PN
+// variant onto the canonical JID.
+export async function ensureTopicMapping(
+	jid: string,
+	displayName: string,
+	chatType: '1:1' | 'group',
+	isGroup: boolean,
+	opts: { canRename?: boolean; aliases?: string[] } = {},
+): Promise<{ topicId: number } | null> {
+	const pending = inflightTopics.get(jid)
+	if (pending) {
+		const topicId = await pending
+		const { db } = relayCtx
+		const mapping = db?.getByJidOrAlias(jid)
+		if (!mapping || mapping.muted) return null
+		return { topicId: mapping.telegram_topic_id ?? topicId }
+	}
+	const task = createOrRefreshMapping(jid, displayName, chatType, isGroup, opts)
+	inflightTopics.set(jid, task)
+	try {
+		const topicId = await task
+		const { db } = relayCtx
+		const mapping = db?.getByJidOrAlias(jid)
+		if (!mapping || mapping.muted) return null
+		return { topicId: mapping.telegram_topic_id ?? topicId }
+	} finally {
+		if (inflightTopics.get(jid) === task) inflightTopics.delete(jid)
+	}
+}
+
+async function createOrRefreshMapping(
+	jid: string,
+	displayName: string,
+	chatType: '1:1' | 'group',
+	isGroup: boolean,
+	opts: { canRename?: boolean; aliases?: string[] },
+): Promise<number> {
+	const { db, tg, supergroupId } = relayCtx
+	if (!db) throw new Error('Bridge DB not initialized')
+	const canRename = opts.canRename ?? true
+	const rememberAliases = (): void => {
+		for (const a of opts.aliases || []) db.addAlias(a, jid)
+	}
+	// Heal a mapping stored under a previous variant (bare LID first
+	// sighting, then PN with alt): keep the existing topic, move the row
+	// and its replies onto the canonical JID instead of creating dupe.
+	for (const variant of [...new Set([jid, ...(opts.aliases || [])])]) {
+		const known = db.getByJidOrAlias(variant)
+		if (known && !known.archived && known.whatsapp_jid !== jid) {
+			const old = known.whatsapp_jid
+			db.delete(old)
+			db.getOrCreate(jid, known.telegram_topic_id, known.display_name, known.chat_type)
+			db.addAlias(old, jid)
+			db.repointReplies(old, jid)
+			rememberAliases()
+			db.updateLastActive(jid)
+			return known.telegram_topic_id
+		}
+	}
+	let mapping = db.getByJidOrAlias(jid)
+	if (!mapping || mapping.archived) {
+		const freshTopicId = await createForumTopic(displayName, isGroup)
+		mapping = db.getOrCreate(jid, freshTopicId, displayName, chatType)
+		rememberAliases()
+		return mapping.telegram_topic_id
+	}
+	rememberAliases()
+	if (mapping.display_name !== displayName) {
+		if (!canRename) {
+			db.updateLastActive(jid)
+			return mapping.telegram_topic_id
+		}
+		mapping = db.getOrCreate(jid, mapping.telegram_topic_id, displayName, chatType)
+		if (tg) {
+			await tgCall(() =>
+				tg!.api.editForumTopic(supergroupId, mapping!.telegram_topic_id, {
+					name: displayName.slice(0, 128),
+				}).catch(() => false), 'edit-topic')
+		}
+	} else {
+		db.updateLastActive(jid)
+	}
+	return mapping.telegram_topic_id
+}

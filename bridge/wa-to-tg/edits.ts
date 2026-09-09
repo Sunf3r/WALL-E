@@ -7,6 +7,7 @@ import { annotateMentions, getMsgText, mentionedJidsOf, phoneOf } from './text.t
 import { describeErr, logEditFailure, routeEdit } from './errors.ts'
 import { type proto, WAMessageStubType } from 'baileys'
 import { waMarkdownToTgEntities } from '../format.ts'
+import { candidatesOf } from './jid.ts'
 import { relayCtx, tgCall } from './state.ts'
 import { deleteTgMirror } from './deletes.ts'
 
@@ -28,34 +29,43 @@ export async function handleWaEdits(
 		try {
 			// Revoke ("delete for everyone") - same event, null message.
 			if (update?.message == null && update?.messageStubType === WAMessageStubType.REVOKE) {
-				const jid = key?.remoteJid
 				const id = key?.id
-				if (!jid || !id || jid === 'status@broadcast') continue
+				if (!id || !key?.remoteJid || key.remoteJid === 'status@broadcast') continue
+				const cands = candidatesOf(key)
+				const mapping = cands.map((c) => db.getByJidOrAlias(c)).find((m) =>
+					m && !m.archived && !m.muted
+				)
+				if (!mapping) continue
 				// A TG-initiated edit mark is irrelevant here, but consuming
 				// it keeps the guard set from growing stale.
-				db.takeTgEdit(jid, id)
-				await deleteTgMirror(jid, id)
+				db.takeTgEdit(mapping.whatsapp_jid, id)
+				await deleteTgMirror(mapping.whatsapp_jid, id, cands)
 				continue
 			}
 			const edited = update?.message?.editedMessage?.message
 			// Anything else (receipts, status, poll votes, ...) is not an edit -
 			// skip silently, these fire constantly.
 			if (!edited || typeof edited !== 'object') continue
-			const jid = key?.remoteJid
 			const id = key?.id
-			if (!jid || !id || jid === 'status@broadcast') {
+			if (!id || !key?.remoteJid || key.remoteJid === 'status@broadcast') {
 				continue
 			}
+			const cands = candidatesOf(key)
+			const jid = cands[0]
 			// Echo of our own TG-TO-WA edit (marked before the WA send) - the
 			// TG message already shows this text; editing would 400.
-			if (db.takeTgEdit(jid, id)) {
+			// Marked with the canonical mapping JID on the TG side, so try
+			// every variant before relaying.
+			const mapping = cands.map((c) => db.getByJidOrAlias(c)).find((m) =>
+				m && !m.archived && !m.muted
+			)
+			if (!mapping) {
 				continue
 			}
-			const mapping = db.getByJid(jid)
-			if (!mapping || mapping.archived || mapping.muted) {
+			if (db.takeTgEdit(mapping.whatsapp_jid, id)) {
 				continue
 			}
-			const target = db.getByWaMsgId(id, jid)
+			const target = db.getByWaMsgIdAny(id, [mapping.whatsapp_jid, ...cands])
 			if (!target) {
 				continue
 			}

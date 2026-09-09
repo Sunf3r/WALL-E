@@ -45,7 +45,7 @@ export async function flushAlbum(key: string): Promise<void> {
 	const { db, limiter, tg, supergroupId } = relayCtx
 	if (items.length === 0 || !db || !limiter || !tg) return
 	const jid = key.split('\n')[0]
-	const mapping = db.getByJid(jid)
+	const mapping = db.getByJidOrAlias(jid)
 	if (!mapping || mapping.archived || mapping.muted) return
 
 	if (items.length === 1) {

@@ -11,6 +11,7 @@ export async function resolveChatName(
 	jid: string,
 	pushName: string | undefined | null,
 	isGroup: boolean,
+	fromMe = false,
 ): Promise<string> {
 	if (isGroup) {
 		const cached = groupNameCache.get(jid)
@@ -24,10 +25,15 @@ export async function resolveChatName(
 		} catch {
 			// fall through to pushName/phone
 		}
-		const fallback = pushName || jid.split('@')[0]
+		// Own pushName is never a group title - use the group id instead.
+		const fallback = (!fromMe && pushName) || jid.split('@')[0]
 		cacheGroupName(jid, fallback)
 		return fallback
 	}
+	// Outgoing 1:1 messages carry our own pushName, not the peer's - fall
+	// back to the phone number so a self-initiated chat is not titled
+	// after ourselves. The peer's reply renames it via canRename below.
+	if (fromMe) return phoneOf(jid) || jid.split('@')[0]
 	return pushName || phoneOf(jid) || jid.split('@')[0]
 }
 
@@ -42,31 +48,6 @@ export async function createForumTopic(displayName: string, _isGroup: boolean): 
 	return topic.message_thread_id
 }
 
-// Ensure a forum topic mapping exists - creates or refreshes it, updates
-// activity and returns null when muted so the caller skips silently.
-export async function ensureTopicMapping(
-	jid: string,
-	displayName: string,
-	chatType: '1:1' | 'group',
-	isGroup: boolean,
-): Promise<{ topicId: number } | null> {
-	const { db } = relayCtx
-	if (!db) return null
-	let mapping = db.getByJid(jid)
-	if (!mapping || mapping.archived) {
-		const freshTopicId = await createForumTopic(displayName, isGroup)
-		mapping = db.getOrCreate(jid, freshTopicId, displayName, chatType)
-	} else {
-		if (mapping.display_name !== displayName) {
-			mapping = db.getOrCreate(jid, mapping.telegram_topic_id, displayName, chatType)
-		} else {
-			db.updateLastActive(jid)
-		}
-	}
-	if (mapping.muted) return null
-	return { topicId: mapping.telegram_topic_id }
-}
-
 // Group membership changes -> service lines in the topic.
 export async function handleGroupParticipants(upd: {
 	id: string
@@ -76,7 +57,7 @@ export async function handleGroupParticipants(upd: {
 	const { db, limiter, tg, supergroupId } = relayCtx
 	if (!db || !limiter || !tg) return
 	try {
-		const mapping = db?.getByJid(upd.id)
+		const mapping = db?.getByJidOrAlias(upd.id)
 		if (!mapping || mapping.archived || mapping.muted) return
 		const names = (upd.participants || [])
 			.map((p) => phoneOf(typeof p === 'string' ? p : p?.id) || 'someone')
@@ -116,7 +97,7 @@ export async function handleGroupUpdates(
 	for (const u of updates || []) {
 		try {
 			if (!u?.id || !u.subject) continue
-			const mapping = db.getByJid(u.id)
+			const mapping = db.getByJidOrAlias(u.id)
 			if (!mapping || mapping.archived || mapping.muted) continue
 			if (mapping.display_name === u.subject) continue
 			cacheGroupName(u.id, u.subject)
