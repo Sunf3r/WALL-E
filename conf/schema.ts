@@ -1,3 +1,6 @@
+// Drizzle postgres schema.
+// Defines users, msgs, and auth tables used across the bot.
+// Single source of truth for migrations and typed queries.
 import {
 	index,
 	integer,

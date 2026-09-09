@@ -1,3 +1,5 @@
+// Help command - shows cmd list and detail from cache
+// Needed so users can discover usage without reading code
 import { type CmdCtx } from '@conf/types/types.d.ts'
 import cache from '@plugin/cache.ts'
 import Cmd from '@class/cmd.ts'

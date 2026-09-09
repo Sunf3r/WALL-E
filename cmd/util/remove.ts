@@ -1,6 +1,5 @@
-// Remove command: strips the background from a quoted/sent image via the Python rembg plugin.
-// Keeps a safe fallback to the original image when the Python step fails, so a missing
-// output file never crashes the command and temp files are always cleaned up.
+// Remove command - strips image background via Python rembg
+// Needed to make clean cutouts with safe original fallback
 import defaults from '@conf/defaults.json' with { type: 'json' }
 import { type CmdCtx } from '@conf/types/types.d.ts'
 import { getMedia } from '@util/msgAbstractions.ts'

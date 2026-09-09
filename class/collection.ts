@@ -1,3 +1,6 @@
+// Capped Map with primary-key helper.
+// Backs the user, group, and msg caches with size limits and upserts.
+// Prevents unbounded memory growth during long bot sessions.
 export default class Collection<K, V> extends Map<K, V> {
 	primaryKey: str
 	limit: num

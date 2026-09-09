@@ -1,3 +1,6 @@
+// Messages upsert - main inbound pipeline
+// Handles revoke backup, ctx parse, perms and cooldown
+// Then dispatches to the matched command
 import { findCachedOriginal, promotePendingDelete, saveDeleted } from '@plugin/deletedStore.ts'
 import { reactToMsg, sendMsg, startTyping } from '@util/msgAbstractions.ts'
 import checkGroupAnnouncer from '@plugin/groupAnnouncer.ts'

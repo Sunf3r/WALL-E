@@ -1,3 +1,5 @@
+// dump_calendar - dev script forcing calendar cache dump
+// - refreshes cache then prints events grouped by day
 import { updateCalendarCache } from '@plugin/calendarParser.ts'
 
 async function run() {

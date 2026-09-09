@@ -1,3 +1,5 @@
+// Gemini chat command - chats with AI plus clean reset pro subcommands
+// Needed to give users AI help with memory control
 import defaults from '@conf/defaults.json' with { type: 'json' }
 import { type CmdCtx } from '@conf/types/types.d.ts'
 import { cleanMemories } from '@plugin/memories.ts'

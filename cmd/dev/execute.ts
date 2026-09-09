@@ -1,3 +1,5 @@
+// Dev-only bash exec - runs shell via runCode with timing and RAM report
+// Needed for host control and quick ops debugging
 import { type CmdCtx } from '@conf/types/types.d.ts'
 import runCode from '@plugin/runCode.ts'
 import Cmd from '@class/cmd.ts'

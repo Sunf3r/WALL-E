@@ -1,3 +1,5 @@
+// Dev-only memory report - shows Deno.memoryUsage stats
+// Needed to track RAM leaks and runtime health
 import { type CmdCtx } from '@conf/types/types.d.ts'
 import Cmd from '@class/cmd.ts'
 

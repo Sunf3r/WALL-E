@@ -1,3 +1,6 @@
+// Baileys socket wrapper.
+// Holds the singleton WA connection used by bot.ts and picks file or postgres auth state.
+// Centralizes connect, lid resolution, and jid filters.
 import {
 	Browsers,
 	isJidBot,

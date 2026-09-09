@@ -1,3 +1,6 @@
+// Abstract Cmd base class.
+// Defines perms, cooldown, and run flow that all commands extend.
+// Keeps permission checks in one place so commands stay small.
 import { reactToMsg, sendMsg } from '@util/msgAbstractions.ts'
 import { type CmdCtx, type Msg } from '@conf/types/types.d.ts'
 import { type default as User } from '@class/user.ts'

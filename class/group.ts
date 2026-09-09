@@ -1,3 +1,6 @@
+// Group model with msg counting and DB persist.
+// Caches recent msgs and syncs member stats to postgres.
+// Lets commands read group state without hitting the DB each time.
 import defaults from '@conf/defaults.json' with { type: 'json' }
 import type { GroupMetadata, GroupParticipant } from 'baileys'
 import { type Msg } from '@conf/types/types.d.ts'

@@ -1,3 +1,5 @@
+// Gotcha command - reveals deleted msgs from deletedStore disk cache
+// Needed to recover texts and media deleted by senders
 import {
 	type DeletedEntry,
 	fetchMissingMedia,

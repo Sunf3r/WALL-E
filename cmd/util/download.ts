@@ -1,3 +1,5 @@
+// Download command - fetches media via yt-dlp using Deno.Command
+// Needed to share links as playable media with doc fallback
 import defaults from '@conf/defaults.json' with { type: 'json' }
 import { type CmdCtx } from '@conf/types/types.d.ts'
 import { randomDelay } from '@util/functions.ts'

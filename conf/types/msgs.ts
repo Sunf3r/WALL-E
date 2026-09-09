@@ -1,3 +1,6 @@
+// Baileys message-type maps and guards.
+// Normalizes raw Baileys keys into simple text, media, and countable types.
+// Lets group counting and parsing ignore protocol noise.
 import type { MsgTypes } from '@conf/types/types.d.ts'
 
 const textTypes = {
