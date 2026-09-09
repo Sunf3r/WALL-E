@@ -1,21 +1,37 @@
 # Agent Workspace Rules
 
+## Conversation rules
+
 - Avoid AI tropes and excessive AI fingerprints such as em-dashes ("—"), headline biscuit pills,
   overly robotic filler, and unnatural prose in message templates and generated outputs. Prefer
   clean, standard hyphens ("-") and natural human-like formatting.
+- Be concise and direct in your responses.
+
+## Code rules
+
 - Imports in every file must be organized descending by line length (longest on top to shortest on
   bottom of the imports section).
-- After fixing any problems or completing code modifications, you MUST always run the following
-  commands sequentially to verify and format the codebase:
-  1. `deno check` (without specifying a file)
-  2. `deno lint`
-  3. `deno fmt`
-- Always follow Clean Code and SOLID principles.
-- Avoid overly large files and complex syntax.
+- Avoid overly large files (>150 lines) and complex syntax. It's better splitting in several small
+  files or even folders, if needed
 - In all files: include a top-of-file comment describing what the file does and why it is needed
   (giving the most important context up front). Always write good comments on functions and
   non-obvious code, adhering to good commenting practices.
-- This workspace is DENO-only. Always choose DENO native libraries/ways instead of DENO-first
-  libraries or NODE libraries (this should only be used as a last resort).
+- Follow Clean Code, SOLID, KISS, YAGNI, and DRY. Keep functions small, pure where possible, and
+  with single responsibility. Prefer composition over inheritance, explicit error handling over
+  silent failures, and early returns over deep nesting.
+- This workspace is Deno-only. Prefer in this order: (1) built-in Deno and Web-standard APIs like
+  `Deno.serve`, `Deno.mkdir`, `Deno.Command`, `fetch`, then (2) Deno-native libraries (std/JSR),
+  then (3) Deno-first packages. Use Node/npm packages only as a last resort.
+
+## Workflow rules
+
+- After any code changes, always verify and format by running these exact commands in order, with no
+  file arguments:
+  1. `deno check`
+  2. `deno lint`
+  3. `deno fmt`
 - All test scripts, debug scripts, and other helper files created by agents must be saved inside the
   `scripts/` directory. Never leave scratch files in the repository root.
+- When asked to commit, use atomic Conventional Commits: one commit per small logical change
+  (`type(scope): short description`, e.g. `fix(chart): ...`). Group several files in the same commit
+  only when together they implement a single thing. Never bundle unrelated changes in one commit.
