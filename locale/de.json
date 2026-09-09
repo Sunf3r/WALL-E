@@ -19,7 +19,7 @@
 		"usage": "[Name eines Befehls]",
 		"desc": "Siehe Informationen zu einem Befehl",
 		"examples": ["Zwillinge", "Aufkleber"],
-		"title": "*[📖] - Hilfemenü**",
+		"title": "*[📖] - Hilfemenü*",
 		"prefix": "[⚙️] Präfix ändern: *{{prefix}} *",
 		"lang": "[🌎] Sprache ändern: *{{lang}} *"
 	},

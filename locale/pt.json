@@ -102,7 +102,7 @@
 		"deleted": "Apagando as últimas {{msgsSize}} mensagens..."
 	},
 	"download": {
-		"usage": "[a] <link> — ou responda mensagem com link",
+		"usage": "[a] <link> - ou responda mensagem com link",
 		"desc": "Baixa vídeo (padrão) ou áudio de um link e manda aqui. Se passar de 256 MB manda como documento.",
 		"examples": [
 			"https://youtube.com/...",
