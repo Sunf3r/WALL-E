@@ -2,7 +2,7 @@
  * Image-to-sticker conversion using sharp.
  *
  * Handles all 4 static sticker formats (full, crop, circle, rounded)
- * entirely on the main thread — sharp is fast enough that no worker
+ * entirely on the main thread - sharp is fast enough that no worker
  * offloading is needed for single images.
  */
 import type { StickerFormat } from '@plugin/sticker/types.ts'
@@ -15,7 +15,7 @@ const SIZE = 512
  *
  * @param buffer   Raw image bytes (JPEG, PNG, WebP, etc.)
  * @param format   Resize/crop strategy
- * @param quality  WebP quality (1–100, default 80)
+ * @param quality  WebP quality (1-100, default 80)
  */
 export function processImage(
 	buffer: Buffer,

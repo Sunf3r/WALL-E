@@ -1,3 +1,6 @@
+// Group announcer - tag-triggered announcement queue
+// Forwards tagged msgs to linked groups in order
+// Simple queue avoids double sends while busy
 import { getMedia, reactToMsg, sendMsg } from '@util/msgAbstractions.ts'
 import { type Msg } from '@conf/types/types.d.ts'
 import { randomDelay } from '@util/functions.ts'

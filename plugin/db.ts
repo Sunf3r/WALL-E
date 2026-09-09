@@ -1,3 +1,6 @@
+// Postgres client - drizzle with postgres-js driver
+// Provides getUser, getGroup and createUser helpers
+// Runs without DB when DATABASE_URL is missing
 import { drizzle } from 'drizzle-orm/postgres-js'
 import * as schema from '@conf/schema.ts'
 import cache from '@plugin/cache.ts'

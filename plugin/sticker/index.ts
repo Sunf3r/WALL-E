@@ -1,10 +1,10 @@
 /**
- * Sticker engine — public facade.
+ * Sticker engine - public facade.
  *
  * Single entry point for sticker creation:
- *   • Images  → sharp on the main thread (fast, ~50ms)
- *   • Videos  → worker thread pool running ffmpeg (non-blocking)
- *   • All outputs get EXIF metadata injected before being returned
+ *   - Images  -> sharp on the main thread (fast, ~50ms)
+ *   - Videos  -> worker thread pool running ffmpeg (non-blocking)
+ *   - All outputs get EXIF metadata injected before being returned
  */
 export type { StickerFormat, StickerMetadata, StickerResult } from '@plugin/sticker/types.ts'
 import type { StickerOptions, StickerResult } from '@plugin/sticker/types.ts'
@@ -12,7 +12,7 @@ import { processImage } from '@plugin/sticker/image.ts'
 import { StickerPool } from '@plugin/sticker/pool.ts'
 import { injectExif } from '@plugin/sticker/exif.ts'
 
-const DEFAULT_MAX_SIZE = 1_000_000 // 1 MB — WhatsApp won't load larger stickers
+const DEFAULT_MAX_SIZE = 1_000_000 // 1 MB - WhatsApp won't load larger stickers
 const POOL_SIZE = 2
 
 const pool = new StickerPool(POOL_SIZE)

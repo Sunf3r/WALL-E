@@ -1,7 +1,7 @@
 /**
  * FFmpeg command builder and executor for animated (video/GIF) stickers.
  *
- * This module is designed to run INSIDE a worker thread — all I/O is
+ * This module is designed to run INSIDE a worker thread - all I/O is
  * synchronous so it blocks only the worker, never the main event loop.
  *
  * Key features:
@@ -51,7 +51,7 @@ export async function encodeVideo(
 		const results = await runFfmpeg(inputPath, outputDir, prefix, formats, level)
 		if (results.every((r) => r.size <= maxSize)) return results
 
-		// too big — clean outputs and retry with lower settings
+		// too big - clean outputs and retry with lower settings
 		cleanOutputs(outputDir, prefix, formats)
 	}
 
@@ -130,7 +130,7 @@ async function runFfmpeg(
  * Build the ffmpeg -filter_complex string and per-output -map args.
  *
  * When multiple formats are requested, the input is decoded once and
- * `split` fans it into parallel scale pipelines — one decode, N outputs.
+ * `split` fans it into parallel scale pipelines - one decode, N outputs.
  */
 function buildFilterGraph(
 	formats: StickerFormat[],

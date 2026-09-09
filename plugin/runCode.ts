@@ -1,3 +1,6 @@
+// Code runner - eval JS plus Deno.Command for other langs
+// Executes temp files with per-lang instructions
+// Supports trigger templates from defaults
 import defaults from '@conf/defaults.json' with { type: 'json' }
 import { db as prisma, getGroup, getUser } from '@db'
 import { sendURMenu } from '@plugin/menuScraping.ts'

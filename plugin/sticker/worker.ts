@@ -4,7 +4,7 @@
  *
  * Receives media buffers from the main thread, writes them to a temp file,
  * runs ffmpeg with adaptive quality, and posts result buffers back.
- * All I/O is intentionally synchronous — this thread exists precisely
+ * All I/O is intentionally synchronous - this thread exists precisely
  * to keep blocking work off the main event loop.
  */
 import type { WorkerRequest, WorkerResponse } from '@plugin/sticker/types.ts'

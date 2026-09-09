@@ -1,3 +1,6 @@
+// Menu scraping - RU menu scrape plus daily bulletin
+// Schedules menu sends, update checks and calendar cron
+// Builds summary with weather and calendar events
 import { analyzeCalendarEvents, type ClassifiedCalendar } from '@util/calendarAnalytics.ts'
 import { type ParsedMenuResult, parseMenuHtml } from '@util/menuParser.ts'
 import { updateCalendarCache } from '@plugin/calendarParser.ts'
