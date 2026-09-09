@@ -1,6 +1,36 @@
+// proto - global prototypes, print logger and time helpers
+// - adds string and number extensions plus now and humanize
 import defaults from '@conf/defaults.json' with { type: 'json' }
-import humanizeDuration, { type Unit } from 'humanize-duration'
 import { getFixedT } from 'i18next'
+
+type ShortUnit = 'y' | 'mo' | 'w' | 'd' | 'h' | 'm' | 's' | 'ms'
+
+// Tiny short-duration formatter, replaces npm humanize-duration.
+// Keeps largest 2 units with short suffixes like 1h 5m.
+function shortDuration(msValue: number, units: ShortUnit[]): string {
+	const table: [ShortUnit, number][] = [
+		['y', 365 * 24 * 3600_000],
+		['mo', 30 * 24 * 3600_000],
+		['w', 7 * 24 * 3600_000],
+		['d', 24 * 3600_000],
+		['h', 3600_000],
+		['m', 60_000],
+		['s', 1000],
+		['ms', 1],
+	]
+	let rest = Math.max(0, Math.round(msValue))
+	const parts: string[] = []
+	for (const [u, size] of table) {
+		if (!units.includes(u) || rest < size) continue
+		const n = Math.floor(rest / size)
+		if (n > 0) {
+			parts.push(`${n}${u}`)
+			rest -= n * size
+		}
+		if (parts.length >= 2) break
+	}
+	return parts.join(' ') || `0${units[units.length - 1] ?? 's'}`
+}
 
 // get 'now' date time formatted
 const now = () => {
@@ -118,29 +148,10 @@ function numPrototypes() {
 			configurable: true,
 			value: function (ms?: bool) {
 				// 1000 => 1s
-				const units: Unit[] = ['y', 'd', 'h', 'm', 's']
+				const units: ShortUnit[] = ['y', 'd', 'h', 'm', 's']
 				if (ms) units.push('ms')
 
-				return humanizeDuration.humanizer({
-					language: 'short',
-					delimiter: ' ',
-					round: true,
-					spacer: '',
-					largest: 2,
-					units,
-					languages: {
-						short: {
-							y: () => 'y',
-							mo: () => 'mo',
-							w: () => 'w',
-							d: () => 'd',
-							h: () => 'h',
-							m: () => 'm',
-							s: () => 's',
-							ms: () => 'ms',
-						},
-					},
-				})(this)
+				return shortDuration(Number(this), units)
 			},
 		},
 	})
