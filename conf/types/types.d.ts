@@ -1,3 +1,6 @@
+// Shared CmdCtx, Msg, and Media types.
+// Gives commands and utils a common shape for handler args.
+// Avoids circular imports between class and util modules.
 import type { AnyMessageContent, proto } from 'baileys'
 import type { TFunction } from 'i18next'
 import type Group from '@class/group.ts'
@@ -54,7 +57,7 @@ interface CmdCtx {
 }
 
 type GoogleFile = {
-	buffer: Buffer<ArrayBufferLike> | ArrayBuffer
+	buffer: Uint8Array | ArrayBuffer
 	mime: str
 }
 type Gparams = {
