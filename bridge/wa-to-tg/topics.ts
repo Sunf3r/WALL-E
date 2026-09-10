@@ -4,9 +4,9 @@
 // instead of opening a second topic. LID/PN variants heal onto the
 // canonical JID (keeping the existing topic), outgoing messages never
 // rename, and real contact renames update the Telegram topic title too.
-import { createForumTopic } from './chat.ts'
-import { chatForMapping } from './routing.ts'
 import { inflightTopics, relayCtx, tgCall } from './state.ts'
+import { chatForMapping } from './routing.ts'
+import { createForumTopic } from './chat.ts'
 
 // Ensure a forum topic mapping exists - creates or refreshes it, updates
 // activity and returns null when muted so the caller skips silently.
@@ -24,19 +24,25 @@ export async function ensureTopicMapping(
 	const pending = inflightTopics.get(jid)
 	if (pending) {
 		const topicId = await pending
-		const { db } = relayCtx
+		const { db, groups } = relayCtx
 		const mapping = db?.getByJidOrAlias(jid)
 		if (!mapping || mapping.muted) return null
-		return { topicId: mapping.telegram_topic_id ?? topicId, chatId: mapping.telegram_chat_id }
+		return {
+			topicId: mapping.telegram_topic_id ?? topicId,
+			chatId: mapping.telegram_chat_id || groups.personal,
+		}
 	}
 	const task = createOrRefreshMapping(jid, displayName, chatType, isGroup, opts)
 	inflightTopics.set(jid, task)
 	try {
 		const topicId = await task
-		const { db } = relayCtx
+		const { db, groups } = relayCtx
 		const mapping = db?.getByJidOrAlias(jid)
 		if (!mapping || mapping.muted) return null
-		return { topicId: mapping.telegram_topic_id ?? topicId, chatId: mapping.telegram_chat_id }
+		return {
+			topicId: mapping.telegram_topic_id ?? topicId,
+			chatId: mapping.telegram_chat_id || groups.personal,
+		}
 	} finally {
 		if (inflightTopics.get(jid) === task) inflightTopics.delete(jid)
 	}
@@ -72,6 +78,10 @@ async function createOrRefreshMapping(
 			)
 			db.addAlias(old, jid)
 			db.repointReplies(old, jid)
+			// A healed row is still the same chat - keep its bucket and
+			// prompt state so classification is never asked twice.
+			db.setBucket(jid, known.bucket)
+			db.setPromptMsgId(jid, known.prompt_msg_id)
 			rememberAliases()
 			db.updateLastActive(jid)
 			return known.telegram_topic_id
