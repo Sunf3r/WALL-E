@@ -1,11 +1,9 @@
 // Bucket classification from Telegram - buttons + commands.
 //
-// The new-chat prompt carries Personal/Business buttons; the tap resolves
-// the chat through the stored prompt message ID and runs the same move
-// the /personal and /business topic commands use. Commands stay as the
-// fallback (deleted prompt, API hiccup, reclassification). The move runs
-// detached - a 100-message replay outlasts Telegram's callback window, so
-// the tap is acknowledged first and the prompt message edited on finish.
+// The new-chat prompt carries Personal/Business buttons resolving the chat
+// through the stored prompt message ID; /personal and /business stay as the
+// fallback. Moves run detached (a replay outlasts the callback window), so
+// the tap is acknowledged first and the prompt edited on finish.
 import { bucketOfChat, type GroupIds } from '../wa-to-tg/routing.ts'
 import { relayCtx } from '../wa-to-tg/state.ts'
 import { moveTopic } from '../wa-to-tg/move.ts'
@@ -34,16 +32,13 @@ export function registerBucketHandlers(tg: Bot, db: BridgeDB, groups: GroupIds):
 			}
 			const mapping = db.getByPrompt(chatId, promptId)
 			if (!mapping) {
-				await ctx.answerCallbackQuery({
-					text: 'Chat not found - use /personal or /business.',
-				})
-					.catch(() => null)
+				const text = 'Chat not found - use /personal or /business.'
+				await ctx.answerCallbackQuery({ text }).catch(() => null)
 				return
 			}
 			if (mapping.bucket === bucket) {
-				await ctx.answerCallbackQuery({ text: `Already in ${LABEL[bucket]}.` }).catch(() =>
-					null
-				)
+				const text = `Already in ${LABEL[bucket]}.`
+				await ctx.answerCallbackQuery({ text }).catch(() => null)
 				return
 			}
 			await ctx.answerCallbackQuery({ text: `Moving to ${LABEL[bucket]}…` }).catch(() => null)
@@ -82,11 +77,36 @@ export function registerBucketHandlers(tg: Bot, db: BridgeDB, groups: GroupIds):
 	}
 }
 
+// One move per chat at a time - a double-tap (or tap plus command) must
+// serialize, never open two topics at once. Chained, not shared: each
+// waiter re-reads the mapping after the previous move settles, so the
+// last intent wins on fresh state.
+const pendingClassifications = new Map<string, Promise<void>>()
+
+function classifyChat(
+	db: BridgeDB,
+	jid: string,
+	bucket: Bucket,
+	chatId: string,
+	promptId: number | null,
+): Promise<void> {
+	const prev = pendingClassifications.get(jid)
+	const task = (async () => {
+		if (prev) await prev.catch(() => null)
+		await runClassify(db, jid, bucket, chatId, promptId)
+	})()
+	pendingClassifications.set(jid, task)
+	task.finally(() => {
+		if (pendingClassifications.get(jid) === task) pendingClassifications.delete(jid)
+	}).catch(() => null)
+	return task
+}
+
 // Shared classify path: move, then retire the prompt (buttons) in the old
 // topic. Failures land on the prompt when there is one, else as a reply.
-// The bot comes from the shared relay context (same instance moveTopic
-// sends through) so the two can never diverge.
-async function classifyChat(
+// Bot comes from the shared relay context (same instance moveTopic sends
+// through) so the two can never diverge.
+async function runClassify(
 	db: BridgeDB,
 	jid: string,
 	bucket: Bucket,
@@ -100,11 +120,8 @@ async function classifyChat(
 		if (!result) throw new Error('move returned no result')
 		if (!result.moved) {
 			if (promptId) {
-				await tg!.api.editMessageText(
-					chatId,
-					promptId,
-					`Already in ${LABEL[bucket]}.`,
-				).catch(() => null)
+				const line = `Already in ${LABEL[bucket]}.`
+				await tg!.api.editMessageText(chatId, promptId, line).catch(() => null)
 			}
 			return
 		}

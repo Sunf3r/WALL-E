@@ -85,14 +85,14 @@ async function replayHistory(
 	const remapped = new Map<number, number>()
 	for (const row of rows) {
 		try {
-			if (row.tg_chat_id && row.tg_chat_id !== fromChat) {
-				skipped++
-				continue
-			}
+			// Copy from the row's own group, not the mapping's: clean-cut
+			// moves leave rows behind in the previous group, and those
+			// messages still exist there to copy from.
+			const srcChat = row.tg_chat_id || fromChat
 			const replyTo = row.tg_reply_to ? remapped.get(row.tg_reply_to) : undefined
 			const sent = await tgCall(
 				() =>
-					tg!.api.copyMessage(toChat, fromChat || row.tg_chat_id, row.tg_msg_id, {
+					tg!.api.copyMessage(toChat, srcChat, row.tg_msg_id, {
 						message_thread_id: toTopic,
 						...(replyTo
 							? {
@@ -110,7 +110,7 @@ async function replayHistory(
 				continue
 			}
 			remapped.set(row.tg_msg_id, sent.message_id)
-			db.moveReplyMap(row.tg_chat_id || fromChat, row.tg_msg_id, toChat, sent.message_id)
+			db.moveReplyMap(srcChat, row.tg_msg_id, toChat, sent.message_id)
 			copied++
 		} catch {
 			skipped++
