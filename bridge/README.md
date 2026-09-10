@@ -2,8 +2,11 @@
 
 ## Overview
 
-One Telegram supergroup (forum topics enabled) mirrors WhatsApp chats, so you can read and reply to
-WhatsApp from Telegram. Each WhatsApp chat (1:1 or group) maps to one forum topic.
+Two Telegram supergroups (forum topics enabled) — personal and business, served by one bot — mirror
+WhatsApp chats, so you can read and reply to WhatsApp from Telegram. Each WhatsApp chat (1:1 or
+group) maps to one forum topic in its bucket's group. New chats land in personal as undecided until
+you tap **👤 Personal** / **💼 Business** on the prompt (or run `/personal` / `/business` in the
+topic); business moves start clean, personal moves replay up to 100 recent messages.
 
 ## Architecture (single process)
 
@@ -21,25 +24,29 @@ approach.
   reactions become WA reacts, edits become protocol MESSAGE_EDITs, and `/new <phone> [name]` starts
   a bridged chat from the Telegram side.
 - **Mapping store** (`db.ts`): SQLite at `conf/gen/bridge.db` —
-  `mappings(whatsapp_jid ↔ telegram_topic_id, …)` + `reply_map`.
-- **Rate limiting** (`rate-limiter.ts`): one global FIFO queue for **Telegram** API calls (all
-  topics share the same supergroup budget), plus a separate light queue for WhatsApp sends. Every
-  `tg.api.*` call is its own queue slot with ~3s spacing; on a 429 the failing send is retried after
-  the server's `retry_after` and the whole queue pauses — no more 429 cascades or silent drops.
+  `mappings(whatsapp_jid ↔ telegram_topic_id, telegram_chat_id, bucket, …)` + `reply_map` keyed by
+  `(tg_chat_id, tg_msg_id)` + `jid_aliases` for LID/PN variants.
+- **Rate limiting** (`rate-limiter.ts`): one global FIFO queue for **Telegram** API calls (shared
+  across both groups, so stricter than either group's budget), plus a separate light queue for
+  WhatsApp sends. Every `tg.api.*` call is its own queue slot with ~3s spacing; on a 429 the failing
+  send is retried after the server's `retry_after` and the whole queue pauses — no more 429 cascades
+  or silent drops.
 
 ## Telegram Bot Setup Steps
 
 1. `/newbot` with @BotFather → token.
-2. Create a supergroup, enable **Topics** (Forum) in group settings.
-3. Add the bot, make it **admin** with `can_manage_topics`.
-4. Send any message in the supergroup, then discover its ID:
+2. Create two supergroups (personal + business), enable **Topics** (Forum) in each.
+3. Add the bot to both, make it **admin** with `can_manage_topics` in each.
+4. Send any message in a group, then discover its ID (repeat per group):
    ```bash
    deno run -A --env-file=conf/.env bridge/mod.ts -- --find-id
    ```
 5. Put the values in `conf/.env` (NOT `bridge/.env` — the bot loads `conf/.env`):
    ```env
    TELEGRAM_BOT_TOKEN='your-bot-token'
-   TELEGRAM_SUPERGROUP_ID='-1001234567890'
+   TELEGRAM_SUPERGROUP_PERSONAL='-1001111111111'
+   TELEGRAM_SUPERGROUP_BUSINESS='-1002222222222'
+   # Legacy single-group setups: both fall back to TELEGRAM_SUPERGROUP_ID.
    # Optional flood-control tuning (defaults shown):
    TELEGRAM_RATE_LIMIT_MS=3000   # spacing between Telegram sends (legacy name: RATE_LIMIT_MS)
    WHATSAPP_RATE_LIMIT_MS=500    # spacing between WhatsApp sends
@@ -56,15 +63,17 @@ stays silent otherwise:
 deno task start:dev   # or: pm2 start conf/ecosystem.config.cjs --attach
 ```
 
-## Commands (inside the supergroup)
+## Commands (inside either supergroup)
 
 - `/start` — bridge status
 - `/id` — show this supergroup's chat ID
-- `/topics` — list active JID → topic mappings
+- `/topics` — list active JID → topic mappings (with bucket)
+- `/personal` / `/business` — move this topic to the other group (same as the prompt buttons)
 - `/archive` / `/close` — stop mirroring a topic (mapping kept)
 - `/reopen` — resume mirroring an archived topic
 - `/mute` / `/unmute` — freeze/resume relay in both directions for this topic (mapping kept)
-- `/new <phone> [name]` — verify a number on WhatsApp and bridge it into a fresh topic
+- `/new <phone> [name]` — verify a number on WhatsApp and bridge it into a fresh topic (inherits the
+  group you run it in, no prompt)
 
 ## Known Limitations
 
@@ -93,7 +102,12 @@ deno task start:dev   # or: pm2 start conf/ecosystem.config.cjs --attach
   deleted instead — needs delete rights in the supergroup; old/gone mirrors just log. TG→WA delete
   sync is impossible — the Bot API emits no event when a Telegram message is deleted.
 - WhatsApp quotes of never-bridged originals render as a real Telegram quote block (blockquote
-  entity) instead of plain `↩️` text; mapped originals still use native replies.
+  entity) instead of plain `↩️` text; mapped originals still use native replies. Quotes of pre-move
+  messages left behind in the other group also degrade to the header (a numeric ID from another
+  group would misattach).
+- Topic moves (`/personal` / `/business` / prompt buttons) serialize per chat — a double-tap never
+  opens two topics. Moving to business starts a fresh topic (history stays readable in the old,
+  closed topic); moving to personal replays up to 100 recent messages with reply threading.
 - Albums: rapid WA photo/video bursts from one sender cross as a single Telegram media group (1.5s
   batching window, so single photos arrive ~1.5s later; extra captions follow as text); TG albums
   (`media_group_id`) forward in order over a 1.2s window (Baileys has no album-send, so WA receives

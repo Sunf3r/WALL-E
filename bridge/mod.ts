@@ -30,7 +30,9 @@ export async function findSupergroupId(): Promise<void> {
 			update.channel_post?.chat
 		if (chat && (chat.type === 'supergroup' || chat.type === 'group')) {
 			console.log(`\nSupergroup ID: \`${chat.id}\`\n`)
-			console.log(`Copy this ID and set it as TELEGRAM_SUPERGROUP_ID in conf/.env.`)
+			console.log(
+				`Copy this ID and set it as TELEGRAM_SUPERGROUP_PERSONAL or TELEGRAM_SUPERGROUP_BUSINESS in conf/.env.`,
+			)
 			console.log(`Chat title: ${chat.title || 'N/A'}`)
 			console.log(`Is forum: ${chat.is_forum || false}`)
 			Deno.exit(0)

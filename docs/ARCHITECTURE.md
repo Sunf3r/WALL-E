@@ -108,8 +108,8 @@ scripts/                 # agent scratch + dev diagnostics (dump_calendar.ts)
 - `bridge/deno.jsonc`: same style config scoped to the bridge, same dep pins.
 - `conf/.env` (see `conf/.env.example`): `TZ`, `DEVS` (owner LIDs, `|` split), `GROUPS1`/`GROUPS2`
   (announcement targets), optional `DATABASE_URL`, `GEMINI`, `TELEGRAM_BOT_TOKEN`,
-  `TELEGRAM_SUPERGROUP_ID`, `RATE_LIMIT_MS`. Loaded via `--env=conf/.env`;
-  `setup/reset.ts:loadEnv()` reparses it manually.
+  `TELEGRAM_SUPERGROUP_PERSONAL`/`_BUSINESS` (legacy `TELEGRAM_SUPERGROUP_ID` fallback),
+  `RATE_LIMIT_MS`. Loaded via `--env=conf/.env`; `setup/reset.ts:loadEnv()` reparses it manually.
 - `conf/defaults.json`: non-secret defaults - `lang: pt`, `prefix: .`, campus lat/long,
   `ai.gemini_chain` + `ai.gemini_pro`, cache caps
   (`users 200, groups 200, dmMsgs 60, groupMsgs 200`), and the `runner` table for `runCode` (yt-dlp
@@ -324,8 +324,9 @@ thinking, PT system prompt with memory protocol + stored facts) -> `sendMessage`
 
 Same-process design: `wa.ts` starts `startBridge()` after `loadEvents()` (which resets listeners),
 and `connection/update.ts` calls `reattachBridge()` after every reconnect. Missing
-`TELEGRAM_BOT_TOKEN`/`SUPERGROUP_ID` disables the bridge (`null`) without stopping WA.
-`-- --find-id` CLI prints supergroup ids via `getUpdates` without touching WA.
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_SUPERGROUP_PERSONAL` (legacy `TELEGRAM_SUPERGROUP_ID`) disables the
+bridge (`null`) without stopping WA. `-- --find-id` CLI prints supergroup ids via `getUpdates`
+without touching WA.
 
 - `mod.ts`: builds `BridgeDB`, TG (3000ms) and WA (500ms) `RateLimiter`s, grammy `Bot`, registers
   both directions, `tg.start` long-poll with
@@ -350,29 +351,32 @@ and `connection/update.ts` calls `reattachBridge()` after every reconnect. Missi
   outgoing never renames, 1:1 renames update the forum title); `routing.ts` resolves the
   personal/business home group (`TELEGRAM_SUPERGROUP_PERSONAL/_BUSINESS`, legacy fallback,
   single-group mode when equal); `move.ts` moves topics across groups (business: clean cut,
-  personal: newest-100 `copyMessage` replay with re-threading, old topic closed with pointer);
-  `prompt.ts` posts the Personal/Business button prompt once per new chat; `db.ts` `jid_aliases`
-  maps every variant to the canonical JID plus `bucket`/`telegram_chat_id`/`prompt_msg_id` routing
-  columns and a composite `(tg_chat_id, tg_msg_id)` reply key; `text.ts` unwrap + `@Name (+phone)`
-  annotation; `media.ts`/`media-utils.ts` download + size/ext; `send.ts`/`send-media.ts` route by
-  kind (photo/video/animation/voice/audio/sticker/document, 1024-char caption overflow follow-ups,
-  round video-note fallback); `quote.ts` reply-target or `author: preview` header;
-  `album.ts`/`album-flush.ts` 1.5s window -> `sendMediaGroup` (singletons arrive ~1.5s late by
-  design); `edits.ts` (text in place, caption fallback, sticker/special skip); `deletes.ts` (spoiler
-  tombstone `... Deleted on WhatsApp` reusing stored snapshot, else hard delete + drop mapping);
-  `reactions.ts` (emoji normalize, last-writer-wins, `REACTION_INVALID` -> heart retry);
-  `special.ts` (location/contact/poll mapping); `unsupported.ts`/`unsupported-preview.ts` friendly
-  `type (rawKey) + preview + sender` notices; `errors.ts` log triage; `state.ts` shared ctx +
-  `tgCall` queue + `notifyTopic` (never throws/loops).
+  personal: newest-100 `copyMessage` replay sourced from each row's home group with re-threading,
+  old topic closed with pointer); `prompt.ts` posts the Personal/Business button prompt once per new
+  chat; `db.ts` `jid_aliases` maps every variant to the canonical JID plus
+  `bucket`/`telegram_chat_id`/`prompt_msg_id` routing columns and a composite
+  `(tg_chat_id, tg_msg_id)` reply key; `text.ts` unwrap + `@Name (+phone)` annotation;
+  `media.ts`/`media-utils.ts` download + size/ext; `send.ts`/`send-media.ts` route by kind
+  (photo/video/animation/voice/audio/sticker/document, 1024-char caption overflow follow-ups, round
+  video-note fallback); `quote.ts` reply-target gated on the destination group (stranded pre-move
+  rows degrade to the header) or `author: preview` header; `album.ts`/`album-flush.ts` 1.5s window
+  -> `sendMediaGroup` (singletons arrive ~1.5s late by design); `edits.ts` (text in place, caption
+  fallback, sticker/special skip); `deletes.ts` (spoiler tombstone `... Deleted on WhatsApp` reusing
+  stored snapshot, else hard delete + drop mapping); `reactions.ts` (emoji normalize,
+  last-writer-wins, `REACTION_INVALID` -> heart retry); `special.ts` (location/contact/poll
+  mapping); `unsupported.ts`/`unsupported-preview.ts` friendly `type (rawKey) + preview + sender`
+  notices; `errors.ts` log triage; `state.ts` shared ctx + `tgCall` queue + `notifyTopic` (never
+  throws/loops).
 - TG->WA (`tg-to-wa.ts` facade + 8 modules): `handlers.ts` guards (either group, no bots, has topic,
   mapping active/unmuted), entity conversion, 20MB-capped download, `media_group_id` album buffering
   (1.2s window, ordered singles - Baileys has no album API), quote stub or fallback header,
   `waSend` + `saveReplyMap` (chat + reply target stored); `handler-events.ts` reaction/edit handlers
   with echo marks; `buckets.ts` Personal/Business buttons (`callback_query`, chat resolved via
-  stored prompt ID) plus `/personal` `/business` topic commands; `content.ts` WA payload builders
-  (`Buffer.from` at boundary, webm->webp transcode, tgs->document, poll/contact text fallback);
-  `media.ts` largest-photo pick + `getFile` fetch with double size caps; `replies.ts` notices +
-  ffmpeg webm conversion; `album.ts` batching; `commands.ts` topic admin
+  stored prompt ID) plus `/personal` `/business` topic commands, serialized per chat (double-tap
+  never opens two topics); `content.ts` WA payload builders (`Buffer.from` at boundary, webm->webp
+  transcode, tgs->document, poll/contact text fallback); `media.ts` largest-photo pick + `getFile`
+  fetch with double size caps; `replies.ts` notices + ffmpeg webm conversion; `album.ts` batching;
+  `commands.ts` topic admin
   (`/start /id /topics /archive /close /reopen
   /mute /unmute /new <phone> [name]` with
   `onWhatsApp` verification).
