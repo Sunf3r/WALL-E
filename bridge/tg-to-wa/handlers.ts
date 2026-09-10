@@ -20,7 +20,7 @@ export function registerTgMessageHandler(
 	waSend: WaSend,
 	groups: GroupIds,
 ): void {
-	const mutedNoticeAt = new Map<number, number>()
+	const mutedNoticeAt = new Map<string, number>()
 	tg.on('message', async (ctx) => {
 		let chatId = ''
 		try {
@@ -31,9 +31,11 @@ export function registerTgMessageHandler(
 			if (!topicId) return
 			const mapping = db.getByTopic(chatId, topicId)
 			if (!mapping || mapping.archived || mapping.muted) {
-				const last = mutedNoticeAt.get(topicId) ?? 0
+				// Throttle key includes the group - topic IDs collide across groups.
+				const noticeKey = `${chatId}:${topicId}`
+				const last = mutedNoticeAt.get(noticeKey) ?? 0
 				if (Date.now() - last > 3_600_000) {
-					mutedNoticeAt.set(topicId, Date.now())
+					mutedNoticeAt.set(noticeKey, Date.now())
 					const line = !mapping || mapping.archived
 						? '⚠️ This chat is archived - relay is paused. Use /reopen to resume.'
 						: '⚠️ This chat is muted - relay is paused. Use /unmute to resume.'

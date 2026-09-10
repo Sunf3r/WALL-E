@@ -151,6 +151,10 @@ export class BridgeDB {
 		if (!mapCols.some((c) => c.name === 'prompt_msg_id')) {
 			this.db.exec(`ALTER TABLE mappings ADD COLUMN prompt_msg_id INTEGER DEFAULT NULL`)
 		}
+		// Topic IDs collide across groups - every TG→WA lookup is (chat, topic).
+		this.db.exec(
+			'CREATE INDEX IF NOT EXISTS idx_chat_topic ON mappings(telegram_chat_id, telegram_topic_id)',
+		)
 		// Single-group DBs predate per-group reply identity: rebuild
 		// reply_map with a composite (chat, message) key so message IDs from
 		// the second group can never collide, plus the reply target used to
@@ -318,16 +322,8 @@ export class BridgeDB {
 		return undefined
 	}
 
-	getByTopicId(topicId: number): MappingRow | undefined {
-		const row = this.db.prepare(
-			'SELECT * FROM mappings WHERE telegram_topic_id = ? AND archived = 0',
-		).get(topicId) as Record<string, unknown> | undefined
-		if (!row) return undefined
-		return toMapping(row)
-	}
-
 	// Group-scoped topic lookup: topic IDs collide across supergroups, so
-	// every TG→WA path resolves (chat, topic) together. Replaces getByTopicId.
+	// every TG→WA path resolves (chat, topic) together.
 	getByTopic(chatId: string, topicId: number): MappingRow | undefined {
 		const row = this.db.prepare(
 			'SELECT * FROM mappings WHERE telegram_chat_id = ? AND telegram_topic_id = ? AND archived = 0',
@@ -399,12 +395,6 @@ export class BridgeDB {
 		)
 	}
 
-	// Drop a reply_map row (used after a successful delete sync so later
-	// edits/reactions targeting the deleted message don't 400).
-	deleteReplyMap(tgMsgId: number): void {
-		this.db.prepare('DELETE FROM reply_map WHERE tg_msg_id = ?').run(tgMsgId)
-	}
-
 	delete(jid: string): void {
 		this.db.prepare('DELETE FROM mappings WHERE whatsapp_jid = ?').run(jid)
 	}
@@ -454,27 +444,13 @@ export class BridgeDB {
 		}
 	}
 
-	getReplyMap(tgMsgId: number): ReplyMapRow | undefined {
-		const row = this.db.prepare('SELECT * FROM reply_map WHERE tg_msg_id = ?').get(tgMsgId) as
-			| Record<string, unknown>
-			| undefined
+	// Group-scoped reply lookup: message IDs collide across supergroups.
+	getReplyMapAt(chatId: string, tgMsgId: number): ReplyMapRow | undefined {
+		const row = this.db.prepare(
+			'SELECT * FROM reply_map WHERE tg_chat_id = ? AND tg_msg_id = ?',
+		).get(chatId, tgMsgId) as Record<string, unknown> | undefined
 		if (!row) return undefined
 		return row as unknown as ReplyMapRow
-	}
-
-	// Group-scoped reply lookup: message IDs collide across supergroups.
-	// Replaces getReplyMap on every path that knows its chat (all of them).
-	getReplyMapAt(chatId: string, tgMsgId: number): ReplyMapRow | undefined {
-		try {
-			const row = this.db.prepare(
-				'SELECT * FROM reply_map WHERE tg_chat_id = ? AND tg_msg_id = ?',
-			).get(chatId, tgMsgId) as Record<string, unknown> | undefined
-			if (!row) return undefined
-			return row as unknown as ReplyMapRow
-		} catch {
-			// Pre-migration schema - fall back to the unscoped lookup.
-			return this.getReplyMap(tgMsgId)
-		}
 	}
 
 	// Newest-first history window for a topic move replay (caller reverses
@@ -496,16 +472,14 @@ export class BridgeDB {
 		).run(newChatId, newTgId, chatId, oldTgId)
 	}
 
-	// Group-scoped row drop (unscoped legacy version below it).
+	// Drop a reply_map row scoped to its group (used after a successful
+	// delete sync so later edits/reactions targeting the deleted message
+	// don't 400).
 	deleteReplyMapAt(chatId: string, tgMsgId: number): void {
-		try {
-			this.db.prepare('DELETE FROM reply_map WHERE tg_chat_id = ? AND tg_msg_id = ?').run(
-				chatId,
-				tgMsgId,
-			)
-		} catch {
-			this.deleteReplyMap(tgMsgId)
-		}
+		this.db.prepare('DELETE FROM reply_map WHERE tg_chat_id = ? AND tg_msg_id = ?').run(
+			chatId,
+			tgMsgId,
+		)
 	}
 
 	// Reverse lookup for the WA→TG direction: given the quoted stanzaId from
