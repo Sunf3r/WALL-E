@@ -4,6 +4,7 @@ import { registerTgEditHandler, registerTgReactionHandler } from './tg-to-wa/han
 import { bucketOfChat, type GroupIds, groupIds } from './wa-to-tg/routing.ts'
 import { registerBucketHandlers } from './tg-to-wa/buckets.ts'
 import { registerTgMessageHandler } from './tg-to-wa/handlers.ts'
+import { registerNewCommand } from './tg-to-wa/newchat.ts'
 import { registerTgCommands } from './tg-to-wa/commands.ts'
 import type { RateLimiter } from './rate-limiter.ts'
 import { formatBytes } from './format.ts'
@@ -28,6 +29,12 @@ export function registerTgHandlers(
 		bucketOfChat(ctx.chat?.id ?? '', groups) !== null
 	const waSend = <T>(fn: () => Promise<T>): Promise<T> => waLimiter.enqueue(fn, 'wa-send')
 	registerTgCommands(
+		tg,
+		db,
+		(fn, label) => tgLimiter.enqueue(fn, label),
+		inSupergroup,
+	)
+	registerNewCommand(
 		tg,
 		db,
 		(fn, label) => tgLimiter.enqueue(fn, label),

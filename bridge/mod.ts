@@ -10,38 +10,13 @@
 //    WhatsApp.
 import { registerTgHandlers } from './tg-to-wa.ts'
 import { groupIds, isDual } from './wa-to-tg/routing.ts'
+import { findSupergroupId } from './find-id.ts'
 import { RateLimiter } from './rate-limiter.ts'
 import { attachWaRelay } from './wa-to-tg.ts'
 import { BridgeDB } from './db.ts'
 import { Bot } from 'grammy'
 
-export async function findSupergroupId(): Promise<void> {
-	const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
-	if (!token) {
-		console.error('Missing TELEGRAM_BOT_TOKEN in env')
-		Deno.exit(1)
-	}
-
-	const bot = new Bot(token)
-	const updates = await bot.api.getUpdates({ limit: 100 })
-
-	for (const update of updates as any[]) {
-		const chat = update.message?.chat || update.edited_message?.chat ||
-			update.channel_post?.chat
-		if (chat && (chat.type === 'supergroup' || chat.type === 'group')) {
-			console.log(`\nSupergroup ID: \`${chat.id}\`\n`)
-			console.log(
-				`Copy this ID and set it as TELEGRAM_SUPERGROUP_PERSONAL or TELEGRAM_SUPERGROUP_BUSINESS in conf/.env.`,
-			)
-			console.log(`Chat title: ${chat.title || 'N/A'}`)
-			console.log(`Is forum: ${chat.is_forum || false}`)
-			Deno.exit(0)
-		}
-	}
-
-	console.log('No supergroup found in recent updates.')
-	console.log('Make sure the bot is added to the supergroup and send a message there first.')
-}
+export { findSupergroupId }
 
 // Starts the Telegram side and hooks the WA→TG relay onto the shared socket.
 // Returns null (instead of throwing) when not configured, so the WhatsApp

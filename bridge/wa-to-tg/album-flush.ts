@@ -5,12 +5,11 @@
 // pending group first so chat order is preserved, singletons fall back to
 // the normal send path.
 import { ALBUM_WINDOW_MS, albumKey, MAX_ALBUM_ITEMS, pendingAlbums } from './album.ts'
-import { extOf, storedEntities, storedText } from './media-utils.ts'
-import { notifyTopic, relayCtx, shortErr, tgCall } from './state.ts'
+import { notifyTopic, relayCtx, shortErr } from './state.ts'
+import { sendAlbumChunk } from './album-send.ts'
 import type { AlbumItem } from './album.ts'
 import { sendToTopic } from './send.ts'
 import type { proto } from 'baileys'
-import { InputFile } from 'grammy'
 
 export function bufferAlbumItem(jid: string, m: proto.IWebMessageInfo, item: AlbumItem): void {
 	const key = albumKey(jid, m)
@@ -73,75 +72,7 @@ export async function flushAlbum(key: string): Promise<void> {
 		const chunk = items.slice(c, c + 10)
 		const first = chunk[0]
 		try {
-			const inputMedia = chunk.map((it, i) => {
-				const file = new InputFile(
-					it.media.buffer,
-					it.media.fileName || `file.${extOf(it.media)}`,
-				)
-				const captioned: Record<string, unknown> = i === 0 && first.body
-					? { caption: first.body.slice(0, 1024) }
-					: {}
-				if (i === 0 && first.body && first.entities.length > 0) {
-					captioned.caption_entities = first.entities
-				}
-				// GIFs ride as plain videos inside media groups (the Bot
-				// API has no animation group item).
-				return it.media.kind === 'image'
-					? { type: 'photo', media: file, ...captioned }
-					: { type: 'video', media: file, ...captioned }
-			})
-			const reply = first.replyToTgId
-				? {
-					reply_parameters: {
-						message_id: first.replyToTgId,
-						allow_sending_without_reply: true,
-					},
-				}
-				: undefined
-			const sentArr = await tgCall(
-				() =>
-					tg!.api.sendMediaGroup(chatId, inputMedia as any, {
-						message_thread_id: first.topicId,
-						...reply,
-					}),
-				'media-group',
-			) as { message_id: number }[]
-			sentArr.forEach((s, i) => {
-				const it = chunk[i]
-				if (s && it) {
-					db!.saveReplyMap(
-						s.message_id,
-						jid,
-						it.m.key?.id || '',
-						JSON.stringify(it.m.key || {}),
-						'media',
-						storedText(it.body),
-						storedEntities(it.entities),
-						{ chatId, replyTo: first.replyToTgId },
-					)
-				}
-			})
-			// Captions beyond the first don't fit in a media group -
-			// deliver them as one follow-up instead of dropping them.
-			const extras = chunk.slice(1).map((it) => it.body).filter((b) => b)
-			if (extras.length > 0) {
-				const followBody = extras.join('\n')
-				const sent = await tgCall(() =>
-					tg!.api.sendMessage(chatId, followBody, {
-						message_thread_id: first.topicId,
-					}), 'message')
-				const last = chunk[chunk.length - 1]
-				db!.saveReplyMap(
-					sent.message_id,
-					jid,
-					last.m.key?.id || '',
-					JSON.stringify(last.m.key || {}),
-					'text',
-					storedText(followBody),
-					null,
-					{ chatId },
-				)
-			}
+			await sendAlbumChunk(jid, chatId, chunk)
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay album group:', e)
 			await notifyTopic(

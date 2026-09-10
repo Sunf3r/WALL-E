@@ -5,20 +5,15 @@
 // album batching - quote resolution, empty notices and mapping live in
 // chat/quote/unsupported helpers so this loop stays small.
 import { annotateMentions, getMentionedJids, getMsgText, phoneOf } from './text.ts'
-import { bufferAlbumItem, flushPendingAlbums } from './album-flush.ts'
-import { maybePromptClassification } from './prompt.ts'
 import { ensureTopicMapping } from './topics.ts'
 import { resolveChatName } from './chat.ts'
 import { notifyTopic, relayCtx, shortErr } from './state.ts'
-import { waMarkdownToTgEntities } from '../format.ts'
 import { canonicalChatJid } from './jid.ts'
 import { notifyEmptyRelay } from './unsupported.ts'
 import { getSpecialContent } from './special.ts'
-import { resolveQuoteTarget } from './quote.ts'
-import { isAlbumEligible } from './album.ts'
 import { downloadWaMedia } from './media.ts'
 import { findKey } from '@util/functions.ts'
-import { sendToTopic } from './send.ts'
+import { dispatchPrepared } from './dispatch.ts'
 import type { proto } from 'baileys'
 
 export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
@@ -96,63 +91,21 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				continue
 			}
 
-			// WhatsApp quote -> Telegram reply via shared helper. The destination
-			// group gates the native reply so a pre-move row stranded in the
-			// other group degrades to a header instead of misattaching.
-			const { replyToTgId, quoteHeader } = resolveQuoteTarget(
+			await dispatchPrepared({
 				db,
 				jid,
-				m,
-				displayName,
 				aliases,
-				cid,
-			)
-
-			const label = m.key.fromMe ? 'You: ' : (isGroup ? `${senderName}: ` : '')
-			// WhatsApp inline markers -> Telegram entities. The sender label
-			// (and quote header) are plain text, so entity offsets shift past
-			// them. Stickers take no caption, so their fallback header still
-			// travels separately via `quote.header` (sent as its own message).
-			const stickerFallback = media?.kind === 'sticker' && !!quoteHeader && !replyToTgId
-			const parsed = waMarkdownToTgEntities(text)
-			const prefix = `${!stickerFallback && quoteHeader ? quoteHeader + '\n' : ''}${label}`
-			const body = `${prefix}${parsed.text}`
-			const entities = parsed.entities.map((e) => ({
-				...e,
-				offset: e.offset + prefix.length,
-			}))
-			// Unmapped originals can't use reply_parameters - render the
-			// fallback header as a real Telegram quote block instead.
-			if (!stickerFallback && quoteHeader) {
-				entities.unshift({ type: 'blockquote', offset: 0, length: quoteHeader.length })
-			}
-			if (isAlbumEligible(media, special, body)) {
-				// Photos/videos wait out the album window so rapid bursts
-				// cross as one Telegram media group instead of N singles.
-				bufferAlbumItem(jid, m, {
-					m,
-					topicId: tid,
-					chatId: cid,
-					body,
-					entities,
-					media,
-					replyToTgId,
-				})
-			} else {
-				// Anything else flushes pending albums first so chat order
-				// is preserved, then sends immediately as before.
-				// sendToTopic enqueues each Telegram API call on the
-				// limiter itself, so this awaits delivery (with flood
-				// retries) instead of just queueing.
-				await flushPendingAlbums(jid)
-				await sendToTopic(tid, cid, body, entities, media, special, jid, m, {
-					tgId: replyToTgId,
-					header: stickerFallback ? quoteHeader : null,
-				})
-			}
-			// First relay from an undecided chat asks personal-or-business
-			// via buttons (no-op for classified chats and single-group mode).
-			await maybePromptClassification(jid, cid, tid, displayName)
+				m,
+				chatId: cid,
+				topicId: tid,
+				displayName,
+				senderName,
+				fromMe,
+				isGroup,
+				text,
+				media,
+				special,
+			})
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA message:', e)
 			if (topicId !== null && chatId) {
