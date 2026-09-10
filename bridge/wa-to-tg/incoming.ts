@@ -6,6 +6,7 @@
 // chat/quote/unsupported helpers so this loop stays small.
 import { annotateMentions, getMentionedJids, getMsgText, phoneOf } from './text.ts'
 import { bufferAlbumItem, flushPendingAlbums } from './album-flush.ts'
+import { maybePromptClassification } from './prompt.ts'
 import { ensureTopicMapping } from './topics.ts'
 import { resolveChatName } from './chat.ts'
 import { notifyTopic, relayCtx, shortErr } from './state.ts'
@@ -146,6 +147,9 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 					header: stickerFallback ? quoteHeader : null,
 				})
 			}
+			// First relay from an undecided chat asks personal-or-business
+			// via buttons (no-op for classified chats and single-group mode).
+			await maybePromptClassification(jid, cid, tid, displayName)
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA message:', e)
 			if (topicId !== null && chatId) {

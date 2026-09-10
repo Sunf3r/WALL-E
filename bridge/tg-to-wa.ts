@@ -2,6 +2,7 @@
 // Sends through the shared WhatsApp socket - thin entry re-exporting API.
 import { registerTgEditHandler, registerTgReactionHandler } from './tg-to-wa/handler-events.ts'
 import { bucketOfChat, type GroupIds, groupIds } from './wa-to-tg/routing.ts'
+import { registerBucketHandlers } from './tg-to-wa/buckets.ts'
 import { registerTgMessageHandler } from './tg-to-wa/handlers.ts'
 import { registerTgCommands } from './tg-to-wa/commands.ts'
 import type { RateLimiter } from './rate-limiter.ts'
@@ -36,4 +37,5 @@ export function registerTgHandlers(
 	registerTgReactionHandler(tg, db, waSend, groups)
 	registerTgMessageHandler(tg, db, tgLimiter, waSend, groups)
 	registerTgEditHandler(tg, db, waSend, groups)
+	registerBucketHandlers(tg, db, groups)
 }
