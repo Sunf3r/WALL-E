@@ -1,9 +1,8 @@
 // Topic move between supergroups - create, replay, repoint, retire.
 //
 // Telegram has no move-topic API, so a move always means: open a fresh
-// topic in the target group, optionally replay recent history into it,
-// repoint the mapping, then close the old topic with a pointer. Business
-// moves start clean (no replay); personal moves replay up to
+// topic in the target group, optionally replay recent history, repoint the
+// mapping, then close the old topic with a pointer. Business moves start clean (no replay); personal moves replay up to
 // PERSONAL_REPLAY_CAP newest mapped messages, oldest-first, re-threading
 // replies whose target was also copied. Uncopied rows keep their old
 // group, so edits/deletes of pre-move messages still land correctly.
@@ -32,7 +31,11 @@ export async function moveTopic(
 	if (!mapping || mapping.archived) return null
 	const fromChat = mapping.telegram_chat_id || groups.personal
 	const toChat = chatOfBucket(bucket, groups)
-	if (fromChat === toChat && mapping.bucket === bucket) {
+	if (fromChat === toChat) {
+		// Same group (single-group mode or already home) - stamp the
+		// bucket, never open a second topic.
+		db.setBucket(jid, bucket)
+		db.setPromptMsgId(jid, null)
 		return {
 			moved: false,
 			chatId: toChat,
@@ -46,21 +49,15 @@ export async function moveTopic(
 		mapping.chat_type === 'group',
 		toChat,
 	)
-	let copied = 0
-	let skipped = 0
-	if (bucket === 'personal') {
-		const replayed = await replayHistory(jid, fromChat, toChat, toTopic)
-		copied = replayed.copied
-		skipped = replayed.skipped
-	}
+	const { copied, skipped } = bucket === 'personal'
+		? await replayHistory(jid, fromChat, toChat, toTopic)
+		: { copied: 0, skipped: 0 }
 	db.getOrCreate(jid, toTopic, mapping.display_name, mapping.chat_type, toChat)
 	db.setBucket(jid, bucket)
 	db.setPromptMsgId(jid, null)
 	await retireOldTopic(fromChat, mapping.telegram_topic_id, mapping.display_name, bucket)
 	const summary = bucket === 'business'
-		? `📦 Moved to Business - fresh topic${
-			fromChat === toChat ? '' : ' (history stays in Personal)'
-		}`
+		? `📦 Moved to Business - fresh topic (history stays in Personal)`
 		: `📦 Moved to Personal - replayed ${copied} recent message${copied === 1 ? '' : 's'}` +
 			(skipped > 0 ? ` (${skipped} skipped)` : '')
 	await tgCall(
