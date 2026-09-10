@@ -96,13 +96,16 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				continue
 			}
 
-			// WhatsApp quote -> Telegram reply via shared helper.
+			// WhatsApp quote -> Telegram reply via shared helper. The destination
+			// group gates the native reply so a pre-move row stranded in the
+			// other group degrades to a header instead of misattaching.
 			const { replyToTgId, quoteHeader } = resolveQuoteTarget(
 				db,
 				jid,
 				m,
 				displayName,
 				aliases,
+				cid,
 			)
 
 			const label = m.key.fromMe ? 'You: ' : (isGroup ? `${senderName}: ` : '')

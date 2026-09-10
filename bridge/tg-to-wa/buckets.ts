@@ -7,6 +7,7 @@
 // detached - a 100-message replay outlasts Telegram's callback window, so
 // the tap is acknowledged first and the prompt message edited on finish.
 import { bucketOfChat, type GroupIds } from '../wa-to-tg/routing.ts'
+import { relayCtx } from '../wa-to-tg/state.ts'
 import { moveTopic } from '../wa-to-tg/move.ts'
 import type { BridgeDB } from '../db.ts'
 import type { Bot } from 'grammy'
@@ -46,7 +47,7 @@ export function registerBucketHandlers(tg: Bot, db: BridgeDB, groups: GroupIds):
 				return
 			}
 			await ctx.answerCallbackQuery({ text: `Moving to ${LABEL[bucket]}…` }).catch(() => null)
-			void classifyChat(db, tg, mapping.whatsapp_jid, bucket, chatId, promptId).catch((e) =>
+			void classifyChat(db, mapping.whatsapp_jid, bucket, chatId, promptId).catch((e) =>
 				console.error('[BRIDGE] bucket classification failed:', e)
 			)
 		} catch (e) {
@@ -71,7 +72,7 @@ export function registerBucketHandlers(tg: Bot, db: BridgeDB, groups: GroupIds):
 					return
 				}
 				await ctx.reply(`Moving to ${LABEL[bucket]}…`)
-				void classifyChat(db, tg, mapping.whatsapp_jid, bucket, chatId, null).catch((e) =>
+				void classifyChat(db, mapping.whatsapp_jid, bucket, chatId, null).catch((e) =>
 					console.error('[BRIDGE] bucket command failed:', e)
 				)
 			} catch (e) {
@@ -83,20 +84,23 @@ export function registerBucketHandlers(tg: Bot, db: BridgeDB, groups: GroupIds):
 
 // Shared classify path: move, then retire the prompt (buttons) in the old
 // topic. Failures land on the prompt when there is one, else as a reply.
+// The bot comes from the shared relay context (same instance moveTopic
+// sends through) so the two can never diverge.
 async function classifyChat(
 	db: BridgeDB,
-	tg: Bot,
 	jid: string,
 	bucket: Bucket,
 	chatId: string,
 	promptId: number | null,
 ): Promise<void> {
+	const { tg } = relayCtx
+	if (!tg) return
 	try {
 		const result = await moveTopic(jid, bucket)
 		if (!result) throw new Error('move returned no result')
 		if (!result.moved) {
 			if (promptId) {
-				await tg.api.editMessageText(
+				await tg!.api.editMessageText(
 					chatId,
 					promptId,
 					`Already in ${LABEL[bucket]}.`,
@@ -109,17 +113,17 @@ async function classifyChat(
 			: `✅ Personal - replayed ${result.copied} message${result.copied === 1 ? '' : 's'}` +
 				(result.skipped > 0 ? ` (${result.skipped} skipped)` : '') + '.'
 		if (promptId) {
-			await tg.api.editMessageText(chatId, promptId, done).catch(() => null)
+			await tg!.api.editMessageText(chatId, promptId, done).catch(() => null)
 		}
 	} catch (e) {
 		console.error('[BRIDGE] classify chat failed:', e)
 		const line = `⚠️ Move to ${LABEL[bucket]} failed - try /${bucket} again.`
 		if (promptId) {
-			await tg.api.editMessageText(chatId, promptId, line).catch(() => null)
+			await tg!.api.editMessageText(chatId, promptId, line).catch(() => null)
 		} else {
 			const mapping = db.getByJidOrAlias(jid)
 			if (mapping) {
-				await tg.api.sendMessage(chatId, line, {
+				await tg!.api.sendMessage(chatId, line, {
 					message_thread_id: mapping.telegram_topic_id,
 				}).catch(() => null)
 			}

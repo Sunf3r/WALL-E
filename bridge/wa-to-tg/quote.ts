@@ -43,19 +43,25 @@ export function getQuoteInfo(m: proto.IWebMessageInfo, fallbackAuthor: string): 
 
 // WhatsApp quote -> Telegram reply. Resolve the quoted stanzaId to the
 // Telegram message mirroring the original; when the original was never
-// bridged (history, pruned), fall back to a quote-styled header so context
-// isn't silently lost.
+// bridged (history, pruned) fall back to a quote-styled header so context
+// isn't silently lost. The target must live in the destination group - a
+// row stranded in the other group by a topic move also falls back to the
+// header, otherwise the reply would attach to an unrelated message that
+// happens to share the numeric ID.
 export function resolveQuoteTarget(
 	db: BridgeDB,
 	jid: string,
 	m: proto.IWebMessageInfo,
 	displayName: string,
 	aliases: string[] = [],
+	chatId = '',
 ): { replyToTgId: number | null; quoteHeader: string | null } {
 	const quote = getQuoteInfo(m, displayName)
 	if (!quote) return { replyToTgId: null, quoteHeader: null }
 	const target = db.getByWaMsgIdAny(quote.stanzaId, [jid, ...aliases])
-	if (target) return { replyToTgId: target.tg_msg_id, quoteHeader: null }
+	if (target && (!chatId || !target.tg_chat_id || target.tg_chat_id === chatId)) {
+		return { replyToTgId: target.tg_msg_id, quoteHeader: null }
+	}
 	return { replyToTgId: null, quoteHeader: `↩️ ${quote.author}: ${quote.preview}` }
 }
 
