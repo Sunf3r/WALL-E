@@ -214,7 +214,7 @@ export class BridgeDB {
 		topicId: number,
 		displayName: string,
 		chatType: '1:1' | 'group',
-		chatId = '',
+		chatId: string,
 	): MappingRow {
 		const existing = this.db
 			.prepare('SELECT * FROM mappings WHERE whatsapp_jid = ?')
@@ -419,7 +419,7 @@ export class BridgeDB {
 		tgKind: MirrorKind = 'unknown',
 		tgText: string | null = null,
 		tgEntitiesJson: string | null = null,
-		opts: { chatId?: string; replyTo?: number | null } = {},
+		opts: { chatId: string; replyTo?: number | null },
 	): void {
 		this.db
 			.prepare(
