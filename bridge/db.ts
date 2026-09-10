@@ -87,6 +87,9 @@ export class BridgeDB {
 		}
 		this.db = new DatabaseSync(path)
 		this.db.exec('PRAGMA journal_mode = WAL')
+		// The bulk script opens this same file while the bot relays - wait
+		// on a locked write instead of throwing SQLITE_BUSY immediately.
+		this.db.exec('PRAGMA busy_timeout = 5000')
 	}
 
 	init(legacyChatId = ''): void {

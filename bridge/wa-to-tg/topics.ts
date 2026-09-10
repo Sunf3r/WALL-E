@@ -5,7 +5,7 @@
 // canonical JID (keeping the existing topic), outgoing messages never
 // rename, and real contact renames update the Telegram topic title too.
 import { inflightTopics, relayCtx, tgCall } from './state.ts'
-import { chatForMapping } from './routing.ts'
+import { chatForMapping, chatOfBucket } from './routing.ts'
 import { createForumTopic } from './chat.ts'
 
 // Ensure a forum topic mapping exists - creates or refreshes it, updates
@@ -89,8 +89,14 @@ async function createOrRefreshMapping(
 	}
 	let mapping = db.getByJidOrAlias(jid)
 	if (!mapping || mapping.archived) {
-		const freshTopicId = await createForumTopic(displayName, isGroup, groups.personal)
-		mapping = db.getOrCreate(jid, freshTopicId, displayName, chatType, groups.personal)
+		// Reactivated chats reopen where their bucket lives - a business
+		// chat unarchived into the personal group would split-brain the
+		// mapping (bucket business, topic personal).
+		const home = !mapping || mapping.bucket === 'undecided'
+			? groups.personal
+			: chatOfBucket(mapping.bucket, groups)
+		const freshTopicId = await createForumTopic(displayName, isGroup, home)
+		mapping = db.getOrCreate(jid, freshTopicId, displayName, chatType, home)
 		rememberAliases()
 		return mapping.telegram_topic_id
 	}
