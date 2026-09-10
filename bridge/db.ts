@@ -14,10 +14,25 @@ export interface MappingRow {
 	archived: boolean
 	// Per-chat mute (/mute): relay skips the chat in both directions.
 	muted: boolean
+	// Which supergroup hosts this topic. '' on rows from single-group DBs
+	// until backfillLegacyChat() stamps them at boot.
+	telegram_chat_id: string
+	// Personal/business routing. New chats start 'undecided' in the
+	// default (personal) group until the owner picks via topic buttons.
+	bucket: Bucket
+	// Bot prompt message asking personal-or-business (button taps resolve
+	// the chat through this ID - callback payloads are capped at 64 bytes).
+	prompt_msg_id: number | null
 }
+
+// Personal/business bucket for dual-supergroup routing.
+export type Bucket = 'personal' | 'business' | 'undecided'
 
 export interface ReplyMapRow {
 	tg_msg_id: number
+	// Supergroup hosting the mirror message. Composite key with tg_msg_id -
+	// message IDs collide across groups, so neither column is unique alone.
+	tg_chat_id: string
 	wa_jid: string
 	wa_msg_id: string
 	wa_key_json: string
@@ -27,6 +42,9 @@ export interface ReplyMapRow {
 	// rows written before this column existed (or TG-originated rows, whose
 	// TG side is the original and never needs editing by the bot).
 	tg_kind: string
+	// Telegram reply target (message ID in the same group) this mirror was
+	// sent as a reply to. Lets a topic move re-thread copied history.
+	tg_reply_to: number | null
 	// Last relayed mirror content (WA→TG rows only): plain body text plus
 	// JSON-encoded entities. Lets a later revoke re-edit the mirror into a
 	// spoiler tombstone instead of deleting it. Null for TG-originated rows
@@ -49,6 +67,9 @@ function toMapping(row: Record<string, unknown>): MappingRow {
 		last_active_at: row.last_active_at as number,
 		archived: Boolean(row.archived),
 		muted: Boolean(row.muted ?? 0),
+		telegram_chat_id: typeof row.telegram_chat_id === 'string' ? row.telegram_chat_id : '',
+		bucket: row.bucket === 'personal' || row.bucket === 'business' ? row.bucket : 'undecided',
+		prompt_msg_id: typeof row.prompt_msg_id === 'number' ? row.prompt_msg_id : null,
 	}
 }
 
@@ -68,7 +89,7 @@ export class BridgeDB {
 		this.db.exec('PRAGMA journal_mode = WAL')
 	}
 
-	init(): void {
+	init(legacyChatId = ''): void {
 		this.db.exec(`
 			CREATE TABLE IF NOT EXISTS mappings (
 				whatsapp_jid TEXT PRIMARY KEY,
@@ -118,6 +139,54 @@ export class BridgeDB {
 		if (!mapCols.some((c) => c.name === 'muted')) {
 			this.db.exec(`ALTER TABLE mappings ADD COLUMN muted INTEGER NOT NULL DEFAULT 0`)
 		}
+		// Dual-supergroup routing columns. Same safe-ADD pattern.
+		if (!mapCols.some((c) => c.name === 'telegram_chat_id')) {
+			this.db.exec(
+				`ALTER TABLE mappings ADD COLUMN telegram_chat_id TEXT NOT NULL DEFAULT ''`,
+			)
+		}
+		if (!mapCols.some((c) => c.name === 'bucket')) {
+			this.db.exec(`ALTER TABLE mappings ADD COLUMN bucket TEXT NOT NULL DEFAULT 'undecided'`)
+		}
+		if (!mapCols.some((c) => c.name === 'prompt_msg_id')) {
+			this.db.exec(`ALTER TABLE mappings ADD COLUMN prompt_msg_id INTEGER DEFAULT NULL`)
+		}
+		// Single-group DBs predate per-group reply identity: rebuild
+		// reply_map with a composite (chat, message) key so message IDs from
+		// the second group can never collide, plus the reply target used to
+		// re-thread copied history on a topic move. Existing rows belong to
+		// the legacy group, stamped via legacyChatId (boot backfills '' too).
+		const replyCols = this.db.prepare(`PRAGMA table_info(reply_map)`).all() as {
+			name: string
+		}[]
+		if (!replyCols.some((c) => c.name === 'tg_chat_id')) {
+			this.db.exec(`
+				CREATE TABLE reply_map_new (
+					tg_chat_id TEXT NOT NULL DEFAULT '',
+					tg_msg_id INTEGER NOT NULL,
+					wa_jid TEXT NOT NULL,
+					wa_msg_id TEXT NOT NULL,
+					wa_key_json TEXT NOT NULL DEFAULT '{}',
+					created_at INTEGER NOT NULL,
+					tg_kind TEXT NOT NULL DEFAULT 'unknown',
+					tg_text TEXT DEFAULT NULL,
+					tg_entities TEXT DEFAULT NULL,
+					tg_reply_to INTEGER DEFAULT NULL,
+					PRIMARY KEY (tg_chat_id, tg_msg_id)
+				)
+			`)
+			this.db.prepare(
+				`INSERT INTO reply_map_new (tg_chat_id, tg_msg_id, wa_jid, wa_msg_id, wa_key_json, created_at, tg_kind, tg_text, tg_entities)
+				 SELECT ?, tg_msg_id, wa_jid, wa_msg_id, wa_key_json, created_at, tg_kind, tg_text, tg_entities FROM reply_map`,
+			).run(legacyChatId)
+			this.db.exec(`DROP TABLE reply_map`)
+			this.db.exec(`ALTER TABLE reply_map_new RENAME TO reply_map`)
+			this.db.exec(
+				'CREATE INDEX IF NOT EXISTS idx_reply_wa ON reply_map(wa_jid, wa_msg_id)',
+			)
+		} else if (!replyCols.some((c) => c.name === 'tg_reply_to')) {
+			this.db.exec(`ALTER TABLE reply_map ADD COLUMN tg_reply_to INTEGER DEFAULT NULL`)
+		}
 		// JID aliases: one contact can arrive as @lid or @s.whatsapp.net.
 		// The alias table maps every seen variant to the canonical JID so
 		// both variants resolve to the same topic instead of splitting.
@@ -138,6 +207,7 @@ export class BridgeDB {
 		topicId: number,
 		displayName: string,
 		chatType: '1:1' | 'group',
+		chatId = '',
 	): MappingRow {
 		const existing = this.db
 			.prepare('SELECT * FROM mappings WHERE whatsapp_jid = ?')
@@ -146,15 +216,16 @@ export class BridgeDB {
 		if (existing) {
 			this.db
 				.prepare(
-					'UPDATE mappings SET telegram_topic_id = ?, display_name = ?, archived = 0, last_active_at = ? WHERE whatsapp_jid = ?',
+					'UPDATE mappings SET telegram_topic_id = ?, display_name = ?, archived = 0, last_active_at = ?, telegram_chat_id = ? WHERE whatsapp_jid = ?',
 				)
-				.run(topicId, displayName, Date.now(), jid)
+				.run(topicId, displayName, Date.now(), chatId, jid)
 			return {
 				...toMapping(existing),
 				telegram_topic_id: topicId,
 				display_name: displayName,
 				archived: false,
 				last_active_at: Date.now(),
+				telegram_chat_id: chatId,
 			}
 		}
 
@@ -167,11 +238,14 @@ export class BridgeDB {
 			last_active_at: Date.now(),
 			archived: false,
 			muted: false,
+			telegram_chat_id: chatId,
+			bucket: 'undecided',
+			prompt_msg_id: null,
 		}
 
 		this.db
 			.prepare(
-				'INSERT INTO mappings (whatsapp_jid, telegram_topic_id, display_name, chat_type, created_at, last_active_at, archived) VALUES (?, ?, ?, ?, ?, ?, ?)',
+				'INSERT INTO mappings (whatsapp_jid, telegram_topic_id, display_name, chat_type, created_at, last_active_at, archived, telegram_chat_id, bucket) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
 			)
 			.run(
 				row.whatsapp_jid,
@@ -181,6 +255,8 @@ export class BridgeDB {
 				row.created_at,
 				row.last_active_at,
 				0,
+				chatId,
+				'undecided',
 			)
 		return row
 	}
@@ -250,6 +326,51 @@ export class BridgeDB {
 		return toMapping(row)
 	}
 
+	// Group-scoped topic lookup: topic IDs collide across supergroups, so
+	// every TG→WA path resolves (chat, topic) together. Replaces getByTopicId.
+	getByTopic(chatId: string, topicId: number): MappingRow | undefined {
+		const row = this.db.prepare(
+			'SELECT * FROM mappings WHERE telegram_chat_id = ? AND telegram_topic_id = ? AND archived = 0',
+		).get(chatId, topicId) as Record<string, unknown> | undefined
+		if (!row) return undefined
+		return toMapping(row)
+	}
+
+	// Resolve a classification-button tap: the prompt message ID is stored
+	// on the mapping because callback payloads are capped at 64 bytes.
+	getByPrompt(chatId: string, msgId: number): MappingRow | undefined {
+		const row = this.db.prepare(
+			'SELECT * FROM mappings WHERE telegram_chat_id = ? AND prompt_msg_id = ? AND archived = 0',
+		).get(chatId, msgId) as Record<string, unknown> | undefined
+		if (!row) return undefined
+		return toMapping(row)
+	}
+
+	setBucket(jid: string, bucket: Bucket): void {
+		this.db.prepare('UPDATE mappings SET bucket = ? WHERE whatsapp_jid = ?').run(bucket, jid)
+	}
+
+	setPromptMsgId(jid: string, msgId: number | null): void {
+		this.db.prepare('UPDATE mappings SET prompt_msg_id = ? WHERE whatsapp_jid = ?').run(
+			msgId,
+			jid,
+		)
+	}
+
+	// Stamp rows that predate per-group identity (mappings + any reply rows
+	// the init() rebuild missed with '') onto the legacy supergroup.
+	backfillLegacyChat(chatId: string): void {
+		if (!chatId) return
+		this.db.prepare(`UPDATE mappings SET telegram_chat_id = ? WHERE telegram_chat_id = ''`).run(
+			chatId,
+		)
+		try {
+			this.db.prepare(`UPDATE reply_map SET tg_chat_id = ? WHERE tg_chat_id = ''`).run(chatId)
+		} catch {
+			// Pre-migration schema without tg_chat_id - init() rebuilds it.
+		}
+	}
+
 	getAllActive(): MappingRow[] {
 		return (this.db.prepare('SELECT * FROM mappings WHERE archived = 0').all() as Record<
 			string,
@@ -305,12 +426,24 @@ export class BridgeDB {
 		tgKind: MirrorKind = 'unknown',
 		tgText: string | null = null,
 		tgEntitiesJson: string | null = null,
+		opts: { chatId?: string; replyTo?: number | null } = {},
 	): void {
 		this.db
 			.prepare(
-				'INSERT OR REPLACE INTO reply_map (tg_msg_id, wa_jid, wa_msg_id, wa_key_json, tg_kind, tg_text, tg_entities, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+				'INSERT OR REPLACE INTO reply_map (tg_chat_id, tg_msg_id, wa_jid, wa_msg_id, wa_key_json, tg_kind, tg_text, tg_entities, tg_reply_to, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
 			)
-			.run(tgMsgId, waJid, waMsgId, waKeyJson, tgKind, tgText, tgEntitiesJson, Date.now())
+			.run(
+				opts.chatId ?? '',
+				tgMsgId,
+				waJid,
+				waMsgId,
+				waKeyJson,
+				tgKind,
+				tgText,
+				tgEntitiesJson,
+				opts.replyTo ?? null,
+				Date.now(),
+			)
 		// keep the table small: prune 7-day rows at most once per hour
 		const now = Date.now()
 		if (now - this.lastReplyPrune > 60 * 60 * 1000) {
@@ -327,6 +460,52 @@ export class BridgeDB {
 			| undefined
 		if (!row) return undefined
 		return row as unknown as ReplyMapRow
+	}
+
+	// Group-scoped reply lookup: message IDs collide across supergroups.
+	// Replaces getReplyMap on every path that knows its chat (all of them).
+	getReplyMapAt(chatId: string, tgMsgId: number): ReplyMapRow | undefined {
+		try {
+			const row = this.db.prepare(
+				'SELECT * FROM reply_map WHERE tg_chat_id = ? AND tg_msg_id = ?',
+			).get(chatId, tgMsgId) as Record<string, unknown> | undefined
+			if (!row) return undefined
+			return row as unknown as ReplyMapRow
+		} catch {
+			// Pre-migration schema - fall back to the unscoped lookup.
+			return this.getReplyMap(tgMsgId)
+		}
+	}
+
+	// Newest-first history window for a topic move replay (caller reverses
+	// to chronological before copying).
+	recentReplyMaps(waJid: string, limit: number): ReplyMapRow[] {
+		try {
+			return this.db.prepare(
+				'SELECT * FROM reply_map WHERE wa_jid = ? ORDER BY created_at DESC, tg_msg_id DESC LIMIT ?',
+			).all(waJid, limit) as unknown as ReplyMapRow[]
+		} catch {
+			return []
+		}
+	}
+
+	// Rewrite a reply row onto its copied message after a topic move.
+	moveReplyMap(chatId: string, oldTgId: number, newChatId: string, newTgId: number): void {
+		this.db.prepare(
+			'UPDATE reply_map SET tg_chat_id = ?, tg_msg_id = ? WHERE tg_chat_id = ? AND tg_msg_id = ?',
+		).run(newChatId, newTgId, chatId, oldTgId)
+	}
+
+	// Group-scoped row drop (unscoped legacy version below it).
+	deleteReplyMapAt(chatId: string, tgMsgId: number): void {
+		try {
+			this.db.prepare('DELETE FROM reply_map WHERE tg_chat_id = ? AND tg_msg_id = ?').run(
+				chatId,
+				tgMsgId,
+			)
+		} catch {
+			this.deleteReplyMap(tgMsgId)
+		}
 	}
 
 	// Reverse lookup for the WA→TG direction: given the quoted stanzaId from
