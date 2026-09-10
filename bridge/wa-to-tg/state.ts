@@ -3,6 +3,7 @@
 // Every WA-TO-TG send funnels through tgCall so flood control stays central -
 // submodules import this context instead of holding their own copies.
 import type { RateLimiter } from '../rate-limiter.ts'
+import { type GroupIds, groupIds } from './routing.ts'
 import type { BridgeDB } from '../db.ts'
 import type { Bot } from 'grammy'
 
@@ -10,15 +11,24 @@ export const relayCtx: {
 	tg: Bot | null
 	db: BridgeDB | null
 	limiter: RateLimiter | null
-	supergroupId: string | number
+	groups: GroupIds
 	attachedSock: unknown
-} = { tg: null, db: null, limiter: null, supergroupId: '', attachedSock: null }
+} = {
+	tg: null,
+	db: null,
+	limiter: null,
+	groups: { personal: '', business: '', legacy: '' },
+	attachedSock: null,
+}
 
 export function setRelayCtx(tgBot: Bot, bridgeDb: BridgeDB, rateLimiter: RateLimiter): void {
 	relayCtx.tg = tgBot
 	relayCtx.db = bridgeDb
 	relayCtx.limiter = rateLimiter
-	relayCtx.supergroupId = Deno.env.get('TELEGRAM_SUPERGROUP_ID')!
+	relayCtx.groups = groupIds()
+	// Single-group DBs predate per-group identity - stamp their rows onto
+	// the legacy supergroup so scoped lookups keep resolving.
+	bridgeDb.backfillLegacyChat(relayCtx.groups.legacy || relayCtx.groups.personal)
 }
 
 export const groupNameCache = new Map<string, string>()
@@ -49,8 +59,12 @@ export function tgCall<T>(fn: () => Promise<T>, label = 'send'): Promise<T> {
 // where the user looks, not just in server logs. Never throws and never
 // loops: it sends via tg.api directly, and the TG-TO-WA side ignores the bot's
 // own messages.
-export async function notifyTopic(topicId: number, line: string): Promise<void> {
-	const { tg, limiter, supergroupId } = relayCtx
+export async function notifyTopic(
+	chatId: string | number,
+	topicId: number,
+	line: string,
+): Promise<void> {
+	const { tg, limiter } = relayCtx
 	if (!tg || !limiter) return
 	// Deprioritized during floods: the limiter already pauses the queue on
 	// 429, so a burst of failures collapses into delayed notices instead of
@@ -58,7 +72,7 @@ export async function notifyTopic(topicId: number, line: string): Promise<void> 
 	// server log already has the details.
 	try {
 		await tgCall(
-			() => tg!.api.sendMessage(supergroupId, line, { message_thread_id: topicId }),
+			() => tg!.api.sendMessage(chatId, line, { message_thread_id: topicId }),
 			'notice',
 		)
 	} catch {

@@ -1,5 +1,6 @@
 // Telegram command handlers - topic admin commands.
 // All tg.command registrations - message handlers stay in facade.
+import { bucketOfChat, type GroupIds } from '../wa-to-tg/routing.ts'
 import type { BridgeDB } from '../db.ts'
 import bot from '@plugin/bot.ts'
 import { Bot } from 'grammy'
@@ -12,7 +13,7 @@ export function registerTgCommands(
 	db: BridgeDB,
 	tgCall: TgCall,
 	inSupergroup: InSupergroup,
-	supergroupId: string,
+	groups: GroupIds,
 ): void {
 	tg.command('start', async (ctx) => {
 		if (!inSupergroup(ctx)) return
@@ -21,7 +22,7 @@ export function registerTgCommands(
 
 	tg.command('id', async (ctx) => {
 		await ctx.reply(
-			`Supergroup ID: \`${ctx.chat.id}\`\nSet it as TELEGRAM_SUPERGROUP_ID in conf/.env.`,
+			`Supergroup ID: \`${ctx.chat.id}\`\nSet it as TELEGRAM_SUPERGROUP_PERSONAL or TELEGRAM_SUPERGROUP_BUSINESS in conf/.env.`,
 			{ parse_mode: 'Markdown' },
 		)
 	})
@@ -30,7 +31,7 @@ export function registerTgCommands(
 		if (!inSupergroup(ctx)) return
 		const topics = db.getAllActive()
 		const msg = topics.map((t) =>
-			`${t.display_name} (${t.whatsapp_jid}) -> topic #${t.telegram_topic_id}`
+			`${t.display_name} (${t.whatsapp_jid}) -> topic #${t.telegram_topic_id} [${t.bucket}]`
 		).join('\n')
 		await ctx.reply(msg || 'No active topics yet.')
 	})
@@ -39,7 +40,7 @@ export function registerTgCommands(
 		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
-		const mapping = db.getByTopicId(topicId)
+		const mapping = db.getByTopic(String(ctx.chat.id), topicId)
 		if (mapping) {
 			db.archive(mapping.whatsapp_jid)
 			await ctx.reply(`Archived bridge for ${mapping.display_name} (mapping kept)`)
@@ -51,7 +52,7 @@ export function registerTgCommands(
 		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
-		const mapping = db.getByTopicId(topicId)
+		const mapping = db.getByTopic(String(ctx.chat.id), topicId)
 		if (mapping) {
 			db.archive(mapping.whatsapp_jid)
 			await ctx.reply(`Closed bridge for ${mapping.display_name} (mapping kept)`)
@@ -62,7 +63,9 @@ export function registerTgCommands(
 		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
-		const all = db.getAll().find((t) => t.telegram_topic_id === topicId)
+		const all = db.getAll().find((t) =>
+			t.telegram_topic_id === topicId && String(t.telegram_chat_id) === String(ctx.chat.id)
+		)
 		if (all) {
 			db.unarchive(all.whatsapp_jid)
 			await ctx.reply(`Reopened bridge for ${all.display_name}`)
@@ -75,7 +78,7 @@ export function registerTgCommands(
 		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
-		const mapping = db.getByTopicId(topicId)
+		const mapping = db.getByTopic(String(ctx.chat.id), topicId)
 		if (mapping) {
 			db.setMuted(mapping.whatsapp_jid, true)
 			await ctx.reply(`Muted ${mapping.display_name} - nothing relays until /unmute.`)
@@ -86,9 +89,9 @@ export function registerTgCommands(
 		if (!inSupergroup(ctx)) return
 		const topicId = (ctx.msg as any)?.message_thread_id
 		if (!topicId) return
-		// Muted mappings are still returned by getByTopicId (only archived
+		// Muted mappings are still returned by getByTopic (only archived
 		// ones are filtered), so this resolves the same row /mute set.
-		const mapping = db.getByTopicId(topicId)
+		const mapping = db.getByTopic(String(ctx.chat.id), topicId)
 		if (mapping) {
 			db.setMuted(mapping.whatsapp_jid, false)
 			await ctx.reply(`Unmuted ${mapping.display_name} - relay resumed.`)
@@ -100,8 +103,9 @@ export function registerTgCommands(
 	// the first message written in that topic relays like any other.
 	tg.command('new', async (ctx) => {
 		try {
-			if (String(ctx.chat.id) !== supergroupId) return
+			if (!inSupergroup(ctx)) return
 			if (ctx.from?.is_bot) return
+			const chatId = String(ctx.chat.id)
 			const args = ((ctx.match as string) || '').trim().split(/\s+/)
 			const digits = (args[0] || '').replace(/\D/g, '')
 			if (!digits || digits.length < 7 || digits.length > 15) {
@@ -139,10 +143,13 @@ export function registerTgCommands(
 			const name = (args.slice(1).join(' ') || `+${digits}`).replace(/[\n\r]+/g, ' ').trim()
 				.slice(0, 128) || `+${digits}`
 			const topic = await tgCall(
-				() => tg.api.createForumTopic(supergroupId, name),
+				() => tg.api.createForumTopic(chatId, name),
 				'new-topic',
 			)
-			db.getOrCreate(jid, topic.message_thread_id, name, '1:1')
+			db.getOrCreate(jid, topic.message_thread_id, name, '1:1', chatId)
+			// A chat born in a group inherits that group's bucket - no prompt.
+			const bucket = bucketOfChat(chatId, groups)
+			if (bucket) db.setBucket(jid, bucket)
 			await ctx.reply(
 				`Bridged +${digits} → topic #${topic.message_thread_id}. Write there to send.`,
 			)

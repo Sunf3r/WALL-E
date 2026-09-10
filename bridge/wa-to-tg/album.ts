@@ -13,6 +13,7 @@ export const MAX_ALBUM_ITEMS = 10
 export interface AlbumItem {
 	m: proto.IWebMessageInfo
 	topicId: number
+	chatId: string
 	body: string
 	entities: TgEntity[]
 	media: { kind: string; buffer: Uint8Array; mime?: string; fileName?: string; ptt?: boolean }

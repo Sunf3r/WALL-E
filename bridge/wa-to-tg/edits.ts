@@ -5,6 +5,7 @@
 // right Telegram endpoint and skips TG-initiated echoes to avoid 400 loops.
 import { annotateMentions, getMsgText, mentionedJidsOf, phoneOf } from './text.ts'
 import { describeErr, logEditFailure, routeEdit } from './errors.ts'
+import { chatForReply } from './routing.ts'
 import { type proto, WAMessageStubType } from 'baileys'
 import { waMarkdownToTgEntities } from '../format.ts'
 import { candidatesOf } from './jid.ts'
@@ -22,7 +23,7 @@ import { deleteTgMirror } from './deletes.ts'
 export async function handleWaEdits(
 	updates: { key: proto.IMessageKey; update: { message?: any; messageStubType?: number } }[],
 ): Promise<void> {
-	const { db, limiter, tg, supergroupId } = relayCtx
+	const { db, limiter, tg, groups } = relayCtx
 	if (!db || !limiter || !tg) return
 
 	for (const { key, update } of updates) {
@@ -91,15 +92,16 @@ export async function handleWaEdits(
 
 			// Each attempt is its own limiter slot (never nested - a tgCall
 			// awaiting another tgCall would deadlock the FIFO queue).
+			const chatId = chatForReply(target, mapping, groups)
 			try {
 				if (route === 'text' || route === 'both') {
 					await tgCall(
-						() => tg!.api.editMessageText(supergroupId, target.tg_msg_id, body, rich),
+						() => tg!.api.editMessageText(chatId, target.tg_msg_id, body, rich),
 						'edit-text',
 					)
 				} else {
 					await tgCall(() =>
-						tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
+						tg!.api.editMessageCaption(chatId, target.tg_msg_id, {
 							caption: body.slice(0, 1024) || undefined,
 						}), 'edit-caption')
 				}
@@ -110,7 +112,7 @@ export async function handleWaEdits(
 					try {
 						await tgCall(
 							() =>
-								tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
+								tg!.api.editMessageCaption(chatId, target.tg_msg_id, {
 									caption: body.slice(0, 1024) || undefined,
 								}),
 							'edit-caption',

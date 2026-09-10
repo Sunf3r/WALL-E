@@ -61,17 +61,18 @@ export const WA_ENVELOPE_KEYS = new Set(['messageContextInfo', 'senderKeyDistrib
 // content preview so the topic shows WHAT didn't cross, not just that
 // something didn't.
 export async function notifyEmptyRelay(
+	chatId: string,
 	topicId: number,
 	dl: { label: string; bytes: number | null } | null | undefined,
 	m: proto.IWebMessageInfo,
 	senderName: string,
 ): Promise<void> {
 	if (dl) {
-		await notifyTopic(topicId, waDownloadFailureLine(dl.label, dl.bytes))
+		await notifyTopic(chatId, topicId, waDownloadFailureLine(dl.label, dl.bytes))
 	} else {
 		const line = waUnsupportedLine(m, senderName)
 		console.warn(`[BRIDGE] unsupported WA message: ${line}`)
-		await notifyTopic(topicId, line)
+		await notifyTopic(chatId, topicId, line)
 	}
 }
 // Topic + log line for a WhatsApp message with no Telegram equivalent.

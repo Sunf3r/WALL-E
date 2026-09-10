@@ -5,6 +5,7 @@
 // spoiler tombstone so context survives, deleting only when no content was
 // stored.
 import { STORED_TEXT_MAX } from './media-utils.ts'
+import { chatForReply } from './routing.ts'
 import { logDeleteFailure } from './errors.ts'
 import { candidatesOf } from './jid.ts'
 import { relayCtx, tgCall } from './state.ts'
@@ -51,8 +52,8 @@ export const SPOILER_MARKER = '🗑️ Deleted on WhatsApp\n'
 // are idempotent); text mirrors edit in place, media mirrors edit the
 // caption. Anything else (stickers, specials, legacy rows without content)
 // returns false so the caller falls back to deleting.
-export async function spoilerTgMirror(target: ReplyMapRow): Promise<boolean> {
-	const { tg, db, limiter, supergroupId } = relayCtx
+export async function spoilerTgMirror(target: ReplyMapRow, chatId: string): Promise<boolean> {
+	const { tg, db, limiter } = relayCtx
 	if (!tg || !limiter || !db) return false
 	const kind = target.tg_kind
 	if (kind !== 'text' && kind !== 'media' && kind !== 'unknown') return false
@@ -80,14 +81,14 @@ export async function spoilerTgMirror(target: ReplyMapRow): Promise<boolean> {
 				const caption = (SPOILER_MARKER + orig).slice(0, 1024)
 				const cEnts = kept.filter((e) => e.offset + e.length <= caption.length)
 				await tgCall(() =>
-					tg!.api.editMessageCaption(supergroupId, target.tg_msg_id, {
+					tg!.api.editMessageCaption(chatId, target.tg_msg_id, {
 						caption,
 						caption_entities: cEnts.length > 0 ? cEnts : undefined,
 					}), 'edit-caption')
 			} else {
 				await tgCall(() =>
 					tg!.api.editMessageText(
-						supergroupId,
+						chatId,
 						target.tg_msg_id,
 						SPOILER_MARKER + orig,
 						rich,
@@ -114,7 +115,7 @@ export async function deleteTgMirror(
 	id: string,
 	aliases: string[] = [],
 ): Promise<void> {
-	const { db, limiter, tg, supergroupId } = relayCtx
+	const { db, limiter, tg, groups } = relayCtx
 	if (!db || !limiter || !tg) return
 	const mapping = db.getByJidOrAlias(jid)
 	if (!mapping || mapping.archived || mapping.muted) return
@@ -122,10 +123,11 @@ export async function deleteTgMirror(
 	if (!target) {
 		return
 	}
-	if (await spoilerTgMirror(target)) return
+	const chatId = chatForReply(target, mapping, groups)
+	if (await spoilerTgMirror(target, chatId)) return
 	try {
-		await tgCall(() => tg!.api.deleteMessage(supergroupId, target.tg_msg_id), 'delete')
-		db!.deleteReplyMap(target.tg_msg_id)
+		await tgCall(() => tg!.api.deleteMessage(chatId, target.tg_msg_id), 'delete')
+		db!.deleteReplyMapAt(chatId, target.tg_msg_id)
 	} catch (e) {
 		logDeleteFailure(target.tg_msg_id, e)
 	}

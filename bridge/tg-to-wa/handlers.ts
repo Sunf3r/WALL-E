@@ -1,5 +1,6 @@
 // Telegram message handler - main TG->WA relay path.
 // Reaction and edit handlers live in handler-events.ts.
+import { bucketOfChat, type GroupIds } from '../wa-to-tg/routing.ts'
 import { notifyTopic, shortErr, tgDownloadFailureLine } from './replies.ts'
 import { buildQuoted, buildWaContent } from './content.ts'
 import type { RateLimiter } from '../rate-limiter.ts'
@@ -17,16 +18,18 @@ export function registerTgMessageHandler(
 	db: BridgeDB,
 	tgLimiter: RateLimiter,
 	waSend: WaSend,
-	supergroupId: string,
+	groups: GroupIds,
 ): void {
 	const mutedNoticeAt = new Map<number, number>()
 	tg.on('message', async (ctx) => {
+		let chatId = ''
 		try {
 			const msg: any = ctx.msg
-			if (String(ctx.chat.id) !== supergroupId || msg.from?.is_bot) return
+			chatId = String(ctx.chat?.id ?? '')
+			if (bucketOfChat(chatId, groups) === null || msg.from?.is_bot) return
 			const topicId = msg.message_thread_id
 			if (!topicId) return
-			const mapping = db.getByTopicId(topicId)
+			const mapping = db.getByTopic(chatId, topicId)
 			if (!mapping || mapping.archived || mapping.muted) {
 				const last = mutedNoticeAt.get(topicId) ?? 0
 				if (Date.now() - last > 3_600_000) {
@@ -34,7 +37,7 @@ export function registerTgMessageHandler(
 					const line = !mapping || mapping.archived
 						? '⚠️ This chat is archived - relay is paused. Use /reopen to resume.'
 						: '⚠️ This chat is muted - relay is paused. Use /unmute to resume.'
-					await notifyTopic(tg, tgLimiter, topicId, line)
+					await notifyTopic(tg, tgLimiter, chatId, topicId, line)
 				}
 				return
 			}
@@ -60,6 +63,7 @@ export function registerTgMessageHandler(
 				await notifyTopic(
 					tg,
 					tgLimiter,
+					chatId,
 					topicId,
 					`⚠️ A Telegram ${unsupportedLabel} has no WhatsApp equivalent - it didn't cross.`,
 				)
@@ -69,6 +73,7 @@ export function registerTgMessageHandler(
 				await notifyTopic(
 					tg,
 					tgLimiter,
+					chatId,
 					topicId,
 					tgDownloadFailureLine(dl.label, dl.bytes, dl.tooLarge),
 				)
@@ -76,7 +81,7 @@ export function registerTgMessageHandler(
 			}
 			const groupId = msg.media_group_id as string | undefined
 			if (groupId && media && (media.kind === 'image' || media.kind === 'video')) {
-				bufferTgAlbumItem(groupId, { msg, topicId, text, media }, {
+				bufferTgAlbumItem(groupId, { msg, topicId, chatId, text, media }, {
 					db,
 					tg,
 					tgLimiter,
@@ -84,7 +89,7 @@ export function registerTgMessageHandler(
 				})
 				return
 			}
-			const quoted = buildQuoted(msg, mapping.whatsapp_jid, db)
+			const quoted = buildQuoted(msg, mapping.whatsapp_jid, db, chatId)
 			let textForWa = text
 			if (!quoted && msg.reply_to_message) {
 				const author = msg.reply_to_message.from?.first_name ||
@@ -110,6 +115,13 @@ export function registerTgMessageHandler(
 						mapping.whatsapp_jid,
 						sent.key.id,
 						JSON.stringify(sent.key),
+						'unknown',
+						null,
+						null,
+						{
+							chatId,
+							replyTo: msg.reply_to_message?.message_id ?? null,
+						},
 					)
 				}
 				if (needsTextFollowUp) {
@@ -120,10 +132,11 @@ export function registerTgMessageHandler(
 		} catch (e) {
 			console.error('[BRIDGE] TG->WA relay failed:', e)
 			const topicId = (ctx.msg as any)?.message_thread_id
-			if (topicId) {
+			if (topicId && chatId) {
 				await notifyTopic(
 					tg,
 					tgLimiter,
+					chatId,
 					topicId,
 					`⚠️ Couldn't send to WhatsApp: ${shortErr(e)}`,
 				)

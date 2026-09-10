@@ -69,12 +69,13 @@ export function getSpecialContent(message: proto.IMessage | undefined | null): W
 // message id (null when the content degrades to a text fallback instead).
 export async function sendSpecial(
 	topicId: number,
+	chatId: string,
 	special: WaSpecial,
 	reply:
 		| { reply_parameters: { message_id: number; allow_sending_without_reply: boolean } }
 		| undefined,
 ): Promise<number | null> {
-	const { tg, supergroupId } = relayCtx
+	const { tg } = relayCtx
 	if (!tg) return null
 	const api = tg.api
 	const thread = { message_thread_id: topicId } as const
@@ -82,7 +83,7 @@ export async function sendSpecial(
 		case 'location': {
 			const sent = await tgCall(() =>
 				api.sendLocation(
-					supergroupId,
+					chatId,
 					special.latitude,
 					special.longitude,
 					{ ...thread, ...reply },
@@ -92,7 +93,7 @@ export async function sendSpecial(
 		case 'contact': {
 			const sent = await tgCall(
 				() =>
-					api.sendContact(supergroupId, special.phone, special.name, {
+					api.sendContact(chatId, special.phone, special.name, {
 						...thread,
 						...reply,
 					}),
@@ -111,7 +112,7 @@ export async function sendSpecial(
 			if (options.length < 2) return null
 			const sent = await tgCall(() =>
 				api.sendPoll(
-					supergroupId,
+					chatId,
 					question,
 					options.map((text) => ({ text })),
 					{

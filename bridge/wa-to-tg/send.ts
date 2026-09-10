@@ -16,6 +16,7 @@ import { InputFile } from 'grammy'
 
 export async function sendToTopic(
 	topicId: number,
+	chatId: string,
 	body: string,
 	entities: TgEntity[],
 	media:
@@ -26,7 +27,7 @@ export async function sendToTopic(
 	waMsg: proto.IWebMessageInfo,
 	quote: { tgId: number | null; header: string | null },
 ): Promise<void> {
-	const { tg, db, supergroupId } = relayCtx
+	const { tg, db } = relayCtx
 	if (!tg || !db) return
 	// Local non-null handle: module-level relay narrowing does not survive
 	// inside the tgCall closures below, so capture it once here.
@@ -40,6 +41,7 @@ export async function sendToTopic(
 	const thread = { message_thread_id: topicId } as const
 	// Persist the mirror content alongside the mapping so a later revoke can
 	// re-edit the message into a spoiler tombstone instead of deleting it.
+	// The reply target travels too so a topic move can re-thread history.
 	const save = (tgId: number, kind: MirrorKind): void => {
 		;(db as BridgeDB).saveReplyMap(
 			tgId,
@@ -49,6 +51,7 @@ export async function sendToTopic(
 			kind,
 			storedText(body),
 			storedEntities(entities),
+			{ chatId, replyTo: quote.tgId },
 		)
 	}
 
@@ -56,11 +59,11 @@ export async function sendToTopic(
 	// first (carrying the native reply), then any text as a follow-up.
 	// Each API call is its own limiter slot.
 	if (special) {
-		const sentId = await sendSpecial(topicId, special, reply)
+		const sentId = await sendSpecial(topicId, chatId, special, reply)
 		if (sentId) save(sentId, 'special')
 		if (body) {
 			const sent = await tgCall(() =>
-				api.sendMessage(supergroupId, body, {
+				api.sendMessage(chatId, body, {
 					...thread,
 					...rich,
 					...reply,
@@ -72,7 +75,7 @@ export async function sendToTopic(
 
 	if (!media) {
 		const sent = await tgCall(() =>
-			api.sendMessage(supergroupId, body, {
+			api.sendMessage(chatId, body, {
 				message_thread_id: topicId,
 				...rich,
 				...reply,
@@ -86,7 +89,7 @@ export async function sendToTopic(
 	if (media.kind === 'sticker' && quote.header && !quote.tgId) {
 		const header: string = quote.header
 		await tgCall(() =>
-			api.sendMessage(supergroupId, header, {
+			api.sendMessage(chatId, header, {
 				message_thread_id: topicId,
 				entities: [{ type: 'blockquote', offset: 0, length: header.length }],
 			}), 'message')
@@ -104,7 +107,7 @@ export async function sendToTopic(
 		let sentNote: { message_id: number }
 		try {
 			sentNote = await tgCall(
-				() => api.sendVideoNote(supergroupId, file, { ...thread, ...reply }),
+				() => api.sendVideoNote(chatId, file, { ...thread, ...reply }),
 				'video-note',
 			)
 		} catch (e) {
@@ -113,7 +116,7 @@ export async function sendToTopic(
 			// non-round-compatible file) degrade to a plain video.
 			if (getRetryAfterSeconds(e) !== null) throw e
 			sentNote = await tgCall(() =>
-				api.sendVideo(supergroupId, file, {
+				api.sendVideo(chatId, file, {
 					...thread,
 					caption,
 					...captionEntities,
@@ -123,7 +126,7 @@ export async function sendToTopic(
 		save(sentNote.message_id, 'media')
 		if (body) {
 			const sent = await tgCall(
-				() => api.sendMessage(supergroupId, body, { ...thread, ...rich, ...reply }),
+				() => api.sendMessage(chatId, body, { ...thread, ...rich, ...reply }),
 				'message',
 			)
 			save(sent.message_id, 'text')
@@ -133,6 +136,7 @@ export async function sendToTopic(
 
 	await dispatchKind({
 		api,
+		chatId,
 		media,
 		file,
 		thread,

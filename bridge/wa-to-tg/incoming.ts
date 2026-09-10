@@ -26,6 +26,7 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 
 	for (const m of messages) {
 		let topicId: number | null = null
+		let chatId: string | null = null
 		try {
 			if (!m?.message || !m.key) continue
 			// Skip protocol traffic (deletes, history sync, ...) and reaction
@@ -65,6 +66,10 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 			})
 			if (!ensured) continue
 			topicId = ensured.topicId
+			chatId = ensured.chatId
+			// Local string-typed alias like tid below: the outer chatId stays
+			// nullable for the catch-block notify, everything below needs one.
+			const cid: string = chatId
 			// Local number-typed alias: the outer topicId stays nullable for
 			// the catch-block notify, but everything below needs a number.
 			const tid: number = topicId
@@ -86,7 +91,7 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 			}
 
 			if (!text && !media && !special) {
-				if (topicId !== null) await notifyEmptyRelay(topicId, dl, m, senderName)
+				if (topicId !== null) await notifyEmptyRelay(cid, topicId, dl, m, senderName)
 				continue
 			}
 
@@ -123,6 +128,7 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				bufferAlbumItem(jid, m, {
 					m,
 					topicId: tid,
+					chatId: cid,
 					body,
 					entities,
 					media,
@@ -135,15 +141,19 @@ export async function handleWAMessages(messages: proto.IWebMessageInfo[]) {
 				// limiter itself, so this awaits delivery (with flood
 				// retries) instead of just queueing.
 				await flushPendingAlbums(jid)
-				await sendToTopic(tid, body, entities, media, special, jid, m, {
+				await sendToTopic(tid, cid, body, entities, media, special, jid, m, {
 					tgId: replyToTgId,
 					header: stickerFallback ? quoteHeader : null,
 				})
 			}
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay one WA message:', e)
-			if (topicId !== null) {
-				await notifyTopic(topicId, `⚠️ Couldn't relay a WhatsApp message: ${shortErr(e)}`)
+			if (topicId !== null && chatId) {
+				await notifyTopic(
+					chatId,
+					topicId,
+					`⚠️ Couldn't relay a WhatsApp message: ${shortErr(e)}`,
+				)
 			}
 		}
 	}

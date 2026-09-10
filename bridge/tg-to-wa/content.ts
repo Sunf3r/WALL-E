@@ -121,11 +121,11 @@ export function tgReactionToWaEmoji(oldList: any[], newList: any[]): string {
 // Telegram reply -> WhatsApp quoted reply. The reply_map tells us which WA
 // message the replied-to Telegram message mirrors. Baileys accepts a minimal
 // quoted stub ({key, message}) when the full original is unavailable.
-export function buildQuoted(msg: any, waJid: string, db: BridgeDB): any {
+export function buildQuoted(msg: any, waJid: string, db: BridgeDB, chatId: string): any {
 	const repliedId = msg.reply_to_message?.message_id
 	if (!repliedId) return null
 	try {
-		const entry = db.getReplyMap(repliedId)
+		const entry = db.getReplyMapAt(chatId, repliedId)
 		if (!entry) return null
 		let key: any = null
 		try {

@@ -31,13 +31,14 @@ export function tgDownloadFailureLine(
 export async function notifyTopic(
 	tg: Bot,
 	tgLimiter: RateLimiter,
+	chatId: string | number,
 	topicId: number,
 	line: string,
 ): Promise<void> {
 	try {
 		await tgLimiter.enqueue(
 			() =>
-				tg.api.sendMessage(String(Deno.env.get('TELEGRAM_SUPERGROUP_ID')), line, {
+				tg.api.sendMessage(chatId, line, {
 					message_thread_id: topicId,
 				}),
 			'notice',

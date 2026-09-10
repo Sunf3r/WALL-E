@@ -18,6 +18,7 @@ export interface TgAlbumDeps {
 export interface TgAlbumItem {
 	msg: any
 	topicId: number
+	chatId: string
 	text: string
 	media: TgMedia
 }
@@ -33,32 +34,36 @@ const pendingTgAlbums = new Map<
 >()
 
 export function bufferTgAlbumItem(groupId: string, item: TgAlbumItem, deps: TgAlbumDeps): void {
-	const existing = pendingTgAlbums.get(groupId)
+	// media_group_id is only unique per chat - scope the buffer key so the
+	// two groups can never merge each other's albums.
+	const key = `${item.chatId}\n${groupId}`
+	const existing = pendingTgAlbums.get(key)
 	if (existing) {
 		if (existing.items.length < 10) existing.items.push(item)
 		return
 	}
 	const timer = setTimeout(() => {
-		void flushTgAlbum(groupId, deps).catch((e) =>
+		void flushTgAlbum(key, deps).catch((e) =>
 			console.error('[BRIDGE] TG album flush failed:', e)
 		)
 	}, TG_ALBUM_WINDOW_MS)
-	pendingTgAlbums.set(groupId, { items: [item], timer })
+	pendingTgAlbums.set(key, { items: [item], timer })
 }
 
-export async function flushTgAlbum(groupId: string, deps: TgAlbumDeps): Promise<void> {
-	const entry = pendingTgAlbums.get(groupId)
+export async function flushTgAlbum(bufferKey: string, deps: TgAlbumDeps): Promise<void> {
+	const entry = pendingTgAlbums.get(bufferKey)
 	if (!entry) return
-	pendingTgAlbums.delete(groupId)
+	pendingTgAlbums.delete(bufferKey)
 	clearTimeout(entry.timer)
 	const items = entry.items
 		.sort((a, b) => (a.msg.message_id || 0) - (b.msg.message_id || 0))
 		.slice(0, 10)
 	if (items.length === 0) return
 	const first = items[0]
-	const mapping = deps.db.getByTopicId(first.topicId)
+	const chatId = first.chatId
+	const mapping = deps.db.getByTopic(chatId, first.topicId)
 	if (!mapping || mapping.archived || mapping.muted) return
-	const quoted = buildQuoted(first.msg, mapping.whatsapp_jid, deps.db)
+	const quoted = buildQuoted(first.msg, mapping.whatsapp_jid, deps.db, chatId)
 	let attached = false
 	let notified = false
 	for (const [i, it] of items.entries()) {
@@ -78,6 +83,13 @@ export async function flushTgAlbum(groupId: string, deps: TgAlbumDeps): Promise<
 						mapping.whatsapp_jid,
 						sent.key.id,
 						JSON.stringify(sent.key),
+						'unknown',
+						null,
+						null,
+						{
+							chatId,
+							replyTo: it.msg.reply_to_message?.message_id ?? null,
+						},
 					)
 				}
 				deps.db.updateLastActive(mapping.whatsapp_jid)
@@ -90,6 +102,7 @@ export async function flushTgAlbum(groupId: string, deps: TgAlbumDeps): Promise<
 				await notifyTopic(
 					deps.tg,
 					deps.tgLimiter,
+					chatId,
 					first.topicId,
 					`⚠️ Couldn't send part of a Telegram album (item ${
 						i + 1

@@ -4,6 +4,7 @@
 // last-writer-wins by design - this normalizes WA emojis for Telegram, skips
 // TG-initiated echoes and retries REACTION_INVALID with the default heart.
 import { reactionErrorDescription } from './errors.ts'
+import { chatForReply } from './routing.ts'
 import { candidatesOf } from './jid.ts'
 import { relayCtx, tgCall } from './state.ts'
 import type { proto } from 'baileys'
@@ -65,7 +66,7 @@ const WA_TO_TG_REACTION_FALLBACK: Record<string, string> = {
 export async function handleWaReactions(
 	reactions: { key: proto.IMessageKey; reaction: proto.IReaction }[],
 ): Promise<void> {
-	const { db, limiter, tg, supergroupId } = relayCtx
+	const { db, limiter, tg, groups } = relayCtx
 	if (!db || !limiter || !tg) return
 
 	for (const { key, reaction } of reactions) {
@@ -96,10 +97,10 @@ export async function handleWaReactions(
 				continue
 			}
 			const payload = emoji ? [{ type: 'emoji' as const, emoji }] : []
+			const chatId = chatForReply(target, mapping, groups)
 			try {
 				await tgCall(
-					() =>
-						tg!.api.setMessageReaction(supergroupId, target.tg_msg_id, payload as any),
+					() => tg!.api.setMessageReaction(chatId, target.tg_msg_id, payload as any),
 					'reaction',
 				)
 			} catch (e) {
@@ -116,7 +117,7 @@ export async function handleWaReactions(
 					try {
 						await tgCall(
 							() =>
-								tg!.api.setMessageReaction(supergroupId, target.tg_msg_id, [
+								tg!.api.setMessageReaction(chatId, target.tg_msg_id, [
 									{ type: 'emoji', emoji: DEFAULT_TG_REACTION },
 								] as any),
 							'reaction',

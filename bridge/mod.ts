@@ -9,6 +9,7 @@
 //    supergroup ID so you can put it in conf/.env. This mode never touches
 //    WhatsApp.
 import { registerTgHandlers } from './tg-to-wa.ts'
+import { groupIds, isDual } from './wa-to-tg/routing.ts'
 import { RateLimiter } from './rate-limiter.ts'
 import { attachWaRelay } from './wa-to-tg.ts'
 import { BridgeDB } from './db.ts'
@@ -53,17 +54,22 @@ export function reattachBridge(): void {
 
 export function startBridge(): Bot | null {
 	const token = Deno.env.get('TELEGRAM_BOT_TOKEN')
-	const supergroupId = Deno.env.get('TELEGRAM_SUPERGROUP_ID')
+	const groups = groupIds()
 
-	if (!token || !supergroupId) {
+	if (!token || !groups.personal) {
 		console.log(
-			'[BRIDGE] disabled: set TELEGRAM_BOT_TOKEN and TELEGRAM_SUPERGROUP_ID to enable',
+			'[BRIDGE] disabled: set TELEGRAM_BOT_TOKEN and TELEGRAM_SUPERGROUP_PERSONAL (or legacy TELEGRAM_SUPERGROUP_ID) to enable',
 		)
 		return null
 	}
+	if (!isDual(groups)) {
+		console.log(
+			'[BRIDGE] single-group mode: set TELEGRAM_SUPERGROUP_BUSINESS to split personal/business.',
+		)
+	}
 
 	const db = new BridgeDB('conf/gen/bridge.db')
-	db.init()
+	db.init(groups.legacy || groups.personal)
 	// Telegram and WhatsApp have independent budgets, so they get independent
 	// queues. All forum topics share ONE supergroup, whose flood control is
 	// stricter than 1 msg/s (~20/min per group + burst penalties with
@@ -96,9 +102,11 @@ export function startBridge(): Bot | null {
 	// The bot must also be an administrator in the supergroup, otherwise
 	// Telegram withholds these updates too (checked below, non-fatal warn).
 	tg.start({
-		allowed_updates: ['message', 'edited_message', 'message_reaction'],
+		allowed_updates: ['message', 'edited_message', 'message_reaction', 'callback_query'],
 	}).catch((e) => console.error('[BRIDGE] Telegram polling stopped:', e))
-	void checkReactionPrereqs(tg, supergroupId)
+	for (const gid of [...new Set([groups.personal, groups.business])]) {
+		void checkReactionPrereqs(tg, gid)
+	}
 
 	console.log('[BRIDGE] running: WhatsApp <-> Telegram topic mirror active')
 	return tg

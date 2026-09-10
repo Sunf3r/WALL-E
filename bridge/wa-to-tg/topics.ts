@@ -5,27 +5,29 @@
 // canonical JID (keeping the existing topic), outgoing messages never
 // rename, and real contact renames update the Telegram topic title too.
 import { createForumTopic } from './chat.ts'
+import { chatForMapping } from './routing.ts'
 import { inflightTopics, relayCtx, tgCall } from './state.ts'
 
 // Ensure a forum topic mapping exists - creates or refreshes it, updates
 // activity and returns null when muted so the caller skips silently.
 // `canRename` is false for outgoing (fromMe) messages so our own pushName
 // never clobbers the contact name; `aliases` registers every seen LID/PN
-// variant onto the canonical JID.
+// variant onto the canonical JID. New chats open in the default (personal)
+// group; the returned chatId is where every follow-up send must go.
 export async function ensureTopicMapping(
 	jid: string,
 	displayName: string,
 	chatType: '1:1' | 'group',
 	isGroup: boolean,
 	opts: { canRename?: boolean; aliases?: string[] } = {},
-): Promise<{ topicId: number } | null> {
+): Promise<{ topicId: number; chatId: string } | null> {
 	const pending = inflightTopics.get(jid)
 	if (pending) {
 		const topicId = await pending
 		const { db } = relayCtx
 		const mapping = db?.getByJidOrAlias(jid)
 		if (!mapping || mapping.muted) return null
-		return { topicId: mapping.telegram_topic_id ?? topicId }
+		return { topicId: mapping.telegram_topic_id ?? topicId, chatId: mapping.telegram_chat_id }
 	}
 	const task = createOrRefreshMapping(jid, displayName, chatType, isGroup, opts)
 	inflightTopics.set(jid, task)
@@ -34,7 +36,7 @@ export async function ensureTopicMapping(
 		const { db } = relayCtx
 		const mapping = db?.getByJidOrAlias(jid)
 		if (!mapping || mapping.muted) return null
-		return { topicId: mapping.telegram_topic_id ?? topicId }
+		return { topicId: mapping.telegram_topic_id ?? topicId, chatId: mapping.telegram_chat_id }
 	} finally {
 		if (inflightTopics.get(jid) === task) inflightTopics.delete(jid)
 	}
@@ -47,7 +49,7 @@ async function createOrRefreshMapping(
 	isGroup: boolean,
 	opts: { canRename?: boolean; aliases?: string[] },
 ): Promise<number> {
-	const { db, tg, supergroupId } = relayCtx
+	const { db, tg, groups } = relayCtx
 	if (!db) throw new Error('Bridge DB not initialized')
 	const canRename = opts.canRename ?? true
 	const rememberAliases = (): void => {
@@ -61,7 +63,13 @@ async function createOrRefreshMapping(
 		if (known && !known.archived && known.whatsapp_jid !== jid) {
 			const old = known.whatsapp_jid
 			db.delete(old)
-			db.getOrCreate(jid, known.telegram_topic_id, known.display_name, known.chat_type)
+			db.getOrCreate(
+				jid,
+				known.telegram_topic_id,
+				known.display_name,
+				known.chat_type,
+				known.telegram_chat_id,
+			)
 			db.addAlias(old, jid)
 			db.repointReplies(old, jid)
 			rememberAliases()
@@ -71,8 +79,8 @@ async function createOrRefreshMapping(
 	}
 	let mapping = db.getByJidOrAlias(jid)
 	if (!mapping || mapping.archived) {
-		const freshTopicId = await createForumTopic(displayName, isGroup)
-		mapping = db.getOrCreate(jid, freshTopicId, displayName, chatType)
+		const freshTopicId = await createForumTopic(displayName, isGroup, groups.personal)
+		mapping = db.getOrCreate(jid, freshTopicId, displayName, chatType, groups.personal)
 		rememberAliases()
 		return mapping.telegram_topic_id
 	}
@@ -82,12 +90,25 @@ async function createOrRefreshMapping(
 			db.updateLastActive(jid)
 			return mapping.telegram_topic_id
 		}
-		mapping = db.getOrCreate(jid, mapping.telegram_topic_id, displayName, chatType)
+		mapping = db.getOrCreate(
+			jid,
+			mapping.telegram_topic_id,
+			displayName,
+			chatType,
+			mapping.telegram_chat_id,
+		)
 		if (tg) {
-			await tgCall(() =>
-				tg!.api.editForumTopic(supergroupId, mapping!.telegram_topic_id, {
-					name: displayName.slice(0, 128),
-				}).catch(() => false), 'edit-topic')
+			await tgCall(
+				() =>
+					tg!.api.editForumTopic(
+						chatForMapping(mapping!, groups),
+						mapping!.telegram_topic_id,
+						{
+							name: displayName.slice(0, 128),
+						},
+					).catch(() => false),
+				'edit-topic',
+			)
 		}
 	} else {
 		db.updateLastActive(jid)

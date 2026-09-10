@@ -4,11 +4,12 @@
 // flood-aware fallback - this keeps the kind switch out of the main send
 // flow so send.ts stays under the file-size budget.
 import { getRetryAfterSeconds } from '../rate-limiter.ts'
-import { relayCtx, tgCall } from './state.ts'
+import { tgCall } from './state.ts'
 import type { InputFile } from 'grammy'
 
 export interface MediaDispatch {
 	api: any
+	chatId: string
 	media: { kind: string; buffer: Uint8Array; mime?: string; fileName?: string; ptt?: boolean }
 	file: InputFile
 	thread: { message_thread_id: number }
@@ -23,14 +24,14 @@ export interface MediaDispatch {
 }
 
 export async function dispatchKind(d: MediaDispatch): Promise<void> {
-	const { api, media, file, thread, reply, body, rich, caption, captionEntities, save } = d
-	const { supergroupId } = relayCtx
+	const { api, chatId, media, file, thread, reply, body, rich, caption, captionEntities, save } =
+		d
 	let sent: { message_id: number }
 
 	switch (media.kind) {
 		case 'image':
 			sent = await tgCall(() =>
-				api.sendPhoto(supergroupId, file, {
+				api.sendPhoto(chatId, file, {
 					...thread,
 					caption,
 					...captionEntities,
@@ -43,14 +44,14 @@ export async function dispatchKind(d: MediaDispatch): Promise<void> {
 			// as GIFs (looping, muted) via sendAnimation instead of sendVideo.
 			sent = media.kind === 'gif'
 				? await tgCall(() =>
-					api.sendAnimation(supergroupId, file, {
+					api.sendAnimation(chatId, file, {
 						...thread,
 						caption,
 						...captionEntities,
 						...reply,
 					}), 'animation')
 				: await tgCall(() =>
-					api.sendVideo(supergroupId, file, {
+					api.sendVideo(chatId, file, {
 						...thread,
 						caption,
 						...captionEntities,
@@ -59,7 +60,7 @@ export async function dispatchKind(d: MediaDispatch): Promise<void> {
 			break
 		case 'voice':
 			sent = await tgCall(() =>
-				api.sendVoice(supergroupId, file, {
+				api.sendVoice(chatId, file, {
 					...thread,
 					caption,
 					...captionEntities,
@@ -68,7 +69,7 @@ export async function dispatchKind(d: MediaDispatch): Promise<void> {
 			break
 		case 'audio':
 			sent = await tgCall(() =>
-				api.sendAudio(supergroupId, file, {
+				api.sendAudio(chatId, file, {
 					...thread,
 					caption,
 					...captionEntities,
@@ -78,7 +79,7 @@ export async function dispatchKind(d: MediaDispatch): Promise<void> {
 		case 'sticker':
 			try {
 				sent = await tgCall(() =>
-					api.sendSticker(supergroupId, file, {
+					api.sendSticker(chatId, file, {
 						message_thread_id: thread.message_thread_id,
 						...reply,
 					}), 'sticker')
@@ -87,7 +88,7 @@ export async function dispatchKind(d: MediaDispatch): Promise<void> {
 				// fallback would just 429 again.
 				if (getRetryAfterSeconds(e) !== null) throw e
 				sent = await tgCall(() =>
-					api.sendDocument(supergroupId, file, {
+					api.sendDocument(chatId, file, {
 						...thread,
 						caption,
 						...captionEntities,
@@ -97,7 +98,7 @@ export async function dispatchKind(d: MediaDispatch): Promise<void> {
 			break
 		default:
 			sent = await tgCall(() =>
-				api.sendDocument(supergroupId, file, {
+				api.sendDocument(chatId, file, {
 					...thread,
 					caption,
 					...captionEntities,
@@ -111,7 +112,7 @@ export async function dispatchKind(d: MediaDispatch): Promise<void> {
 	if (caption === undefined && body) {
 		const overflow = await tgCall(
 			() =>
-				api.sendMessage(supergroupId, body, {
+				api.sendMessage(chatId, body, {
 					message_thread_id: thread.message_thread_id,
 					...rich,
 					...reply,

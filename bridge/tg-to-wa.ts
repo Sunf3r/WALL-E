@@ -1,6 +1,7 @@
 // Telegram -> WhatsApp relay - facade wiring submodules.
 // Sends through the shared WhatsApp socket - thin entry re-exporting API.
 import { registerTgEditHandler, registerTgReactionHandler } from './tg-to-wa/handler-events.ts'
+import { bucketOfChat, type GroupIds, groupIds } from './wa-to-tg/routing.ts'
 import { registerTgMessageHandler } from './tg-to-wa/handlers.ts'
 import { registerTgCommands } from './tg-to-wa/commands.ts'
 import type { RateLimiter } from './rate-limiter.ts'
@@ -20,18 +21,19 @@ export function registerTgHandlers(
 	tgLimiter: RateLimiter,
 	waLimiter: RateLimiter,
 ): void {
-	const supergroupId = String(Deno.env.get('TELEGRAM_SUPERGROUP_ID'))
+	const groups: GroupIds = groupIds()
+	// One bot serves both forum groups - any update outside them is ignored.
 	const inSupergroup = (ctx: { chat?: { id?: string | number } }): boolean =>
-		String(ctx.chat?.id) === supergroupId
+		bucketOfChat(ctx.chat?.id ?? '', groups) !== null
 	const waSend = <T>(fn: () => Promise<T>): Promise<T> => waLimiter.enqueue(fn, 'wa-send')
 	registerTgCommands(
 		tg,
 		db,
 		(fn, label) => tgLimiter.enqueue(fn, label),
 		inSupergroup,
-		supergroupId,
+		groups,
 	)
-	registerTgReactionHandler(tg, db, waSend, supergroupId)
-	registerTgMessageHandler(tg, db, tgLimiter, waSend, supergroupId)
-	registerTgEditHandler(tg, db, waSend, supergroupId)
+	registerTgReactionHandler(tg, db, waSend, groups)
+	registerTgMessageHandler(tg, db, tgLimiter, waSend, groups)
+	registerTgEditHandler(tg, db, waSend, groups)
 }

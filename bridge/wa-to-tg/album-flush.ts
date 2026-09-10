@@ -42,18 +42,29 @@ export async function flushAlbum(key: string): Promise<void> {
 	pendingAlbums.delete(key)
 	clearTimeout(entry.timer)
 	const { items } = entry
-	const { db, limiter, tg, supergroupId } = relayCtx
+	const { db, limiter, tg } = relayCtx
 	if (items.length === 0 || !db || !limiter || !tg) return
 	const jid = key.split('\n')[0]
 	const mapping = db.getByJidOrAlias(jid)
 	if (!mapping || mapping.archived || mapping.muted) return
+	const chatId = mapping.telegram_chat_id || relayCtx.groups.personal
 
 	if (items.length === 1) {
 		const it = items[0]
-		await sendToTopic(it.topicId, it.body, it.entities, it.media, null, jid, it.m, {
-			tgId: it.replyToTgId,
-			header: null,
-		}).catch((e) => console.error('[BRIDGE] failed to relay album singleton:', e))
+		await sendToTopic(
+			it.topicId,
+			it.chatId || chatId,
+			it.body,
+			it.entities,
+			it.media,
+			null,
+			jid,
+			it.m,
+			{
+				tgId: it.replyToTgId,
+				header: null,
+			},
+		).catch((e) => console.error('[BRIDGE] failed to relay album singleton:', e))
 		return
 	}
 
@@ -89,7 +100,7 @@ export async function flushAlbum(key: string): Promise<void> {
 				: undefined
 			const sentArr = await tgCall(
 				() =>
-					tg!.api.sendMediaGroup(supergroupId, inputMedia as any, {
+					tg!.api.sendMediaGroup(chatId, inputMedia as any, {
 						message_thread_id: first.topicId,
 						...reply,
 					}),
@@ -106,6 +117,7 @@ export async function flushAlbum(key: string): Promise<void> {
 						'media',
 						storedText(it.body),
 						storedEntities(it.entities),
+						{ chatId, replyTo: first.replyToTgId },
 					)
 				}
 			})
@@ -115,7 +127,7 @@ export async function flushAlbum(key: string): Promise<void> {
 			if (extras.length > 0) {
 				const followBody = extras.join('\n')
 				const sent = await tgCall(() =>
-					tg!.api.sendMessage(supergroupId, followBody, {
+					tg!.api.sendMessage(chatId, followBody, {
 						message_thread_id: first.topicId,
 					}), 'message')
 				const last = chunk[chunk.length - 1]
@@ -127,11 +139,13 @@ export async function flushAlbum(key: string): Promise<void> {
 					'text',
 					storedText(followBody),
 					null,
+					{ chatId },
 				)
 			}
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay album group:', e)
 			await notifyTopic(
+				chatId,
 				first.topicId,
 				`⚠️ Couldn't relay a photo group (${chunk.length} photos): ${shortErr(e)}`,
 			)

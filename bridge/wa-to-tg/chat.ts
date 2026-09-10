@@ -4,6 +4,7 @@
 // names (with caching), creates topics through the flood queue and relays
 // membership and subject changes as service lines.
 import { cacheGroupName, groupNameCache, relayCtx, tgCall } from './state.ts'
+import { chatForMapping } from './routing.ts'
 import { phoneOf } from './text.ts'
 import bot from '@plugin/bot.ts'
 
@@ -37,14 +38,18 @@ export async function resolveChatName(
 	return pushName || phoneOf(jid) || jid.split('@')[0]
 }
 
-export async function createForumTopic(displayName: string, _isGroup: boolean): Promise<number> {
-	const { tg, supergroupId } = relayCtx
+export async function createForumTopic(
+	displayName: string,
+	_isGroup: boolean,
+	chatId: string,
+): Promise<number> {
+	const { tg } = relayCtx
 	if (!tg) throw new Error('Telegram bot not initialized')
 	const name = (displayName || 'Unknown').replace(/[\n\r]+/g, ' ').trim().slice(0, 128) ||
 		'Unknown'
 	// Topic creation is a Bot API call like any other - it goes through the
 	// limiter so a burst of new chats can't flood the supergroup budget.
-	const topic = await tgCall(() => tg!.api.createForumTopic(supergroupId, name), 'new-topic')
+	const topic = await tgCall(() => tg!.api.createForumTopic(chatId, name), 'new-topic')
 	return topic.message_thread_id
 }
 
@@ -54,7 +59,7 @@ export async function handleGroupParticipants(upd: {
 	participants: (string | { id?: string })[]
 	action: string
 }): Promise<void> {
-	const { db, limiter, tg, supergroupId } = relayCtx
+	const { db, limiter, tg, groups } = relayCtx
 	if (!db || !limiter || !tg) return
 	try {
 		const mapping = db?.getByJidOrAlias(upd.id)
@@ -80,7 +85,7 @@ export async function handleGroupParticipants(upd: {
 				return
 		}
 		await tgCall(() =>
-			tg!.api.sendMessage(supergroupId, line!, {
+			tg!.api.sendMessage(chatForMapping(mapping, groups), line!, {
 				message_thread_id: mapping.telegram_topic_id,
 			}), 'service-line')
 	} catch (e) {
@@ -92,7 +97,7 @@ export async function handleGroupParticipants(upd: {
 export async function handleGroupUpdates(
 	updates: Partial<{ id: string; subject: string }>[],
 ): Promise<void> {
-	const { db, limiter, tg, supergroupId } = relayCtx
+	const { db, limiter, tg, groups } = relayCtx
 	if (!db || !limiter || !tg) return
 	for (const u of updates || []) {
 		try {
@@ -101,11 +106,24 @@ export async function handleGroupUpdates(
 			if (!mapping || mapping.archived || mapping.muted) continue
 			if (mapping.display_name === u.subject) continue
 			cacheGroupName(u.id, u.subject)
-			db.getOrCreate(u.id, mapping.telegram_topic_id, u.subject, mapping.chat_type)
-			await tgCall(() =>
-				tg!.api.editForumTopic(supergroupId, mapping.telegram_topic_id, {
-					name: u.subject!.slice(0, 128),
-				}).catch(() => false), 'edit-topic')
+			db.getOrCreate(
+				u.id,
+				mapping.telegram_topic_id,
+				u.subject,
+				mapping.chat_type,
+				mapping.telegram_chat_id,
+			)
+			await tgCall(
+				() =>
+					tg!.api.editForumTopic(
+						chatForMapping(mapping, groups),
+						mapping.telegram_topic_id,
+						{
+							name: u.subject!.slice(0, 128),
+						},
+					).catch(() => false),
+				'edit-topic',
+			)
 		} catch (e) {
 			console.error('[BRIDGE] failed to relay group update:', e)
 		}
