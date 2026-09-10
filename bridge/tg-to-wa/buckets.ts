@@ -4,7 +4,7 @@
 // through the stored prompt message ID; /personal and /business stay as the
 // fallback. Moves run detached (a replay outlasts the callback window), so
 // the tap is acknowledged first and the prompt edited on finish.
-import { bucketOfChat, type GroupIds } from '../wa-to-tg/routing.ts'
+import { bucketOfChat, chatOfBucket, type GroupIds } from '../wa-to-tg/routing.ts'
 import { relayCtx } from '../wa-to-tg/state.ts'
 import { moveTopic } from '../wa-to-tg/move.ts'
 import type { BridgeDB } from '../db.ts'
@@ -23,6 +23,11 @@ export function registerBucketHandlers(tg: Bot, db: BridgeDB, groups: GroupIds):
 				return
 			}
 			const bucket = (ctx.match?.[1] === 'business' ? 'business' : 'personal') as Bucket
+			if (!chatOfBucket(bucket, groups)) {
+				await ctx.answerCallbackQuery({ text: `${LABEL[bucket]} group is not configured.` })
+					.catch(() => null)
+				return
+			}
 			const promptId = (ctx.callbackQuery?.message as { message_id?: number } | undefined)
 				?.message_id
 			if (!promptId) {
@@ -63,7 +68,14 @@ export function registerBucketHandlers(tg: Bot, db: BridgeDB, groups: GroupIds):
 					return
 				}
 				if (mapping.bucket === bucket) {
-					await ctx.reply(`Already in ${LABEL[bucket]}.`)
+					const text = `Already in ${LABEL[bucket]}.`
+					await ctx.reply(text)
+					return
+				}
+				if (!chatOfBucket(bucket, groups)) {
+					await ctx.reply(
+						`The ${LABEL[bucket]} group is not configured - set it in conf/.env.`,
+					)
 					return
 				}
 				await ctx.reply(`Moving to ${LABEL[bucket]}…`)

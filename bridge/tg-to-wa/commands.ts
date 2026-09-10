@@ -9,7 +9,6 @@ export type InSupergroup = (ctx: { chat?: { id?: string | number } }) => boolean
 export function registerTgCommands(
 	tg: Bot,
 	db: BridgeDB,
-	tgCall: TgCall,
 	inSupergroup: InSupergroup,
 ): void {
 	tg.command('start', async (ctx) => {

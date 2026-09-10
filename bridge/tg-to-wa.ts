@@ -31,7 +31,6 @@ export function registerTgHandlers(
 	registerTgCommands(
 		tg,
 		db,
-		(fn, label) => tgLimiter.enqueue(fn, label),
 		inSupergroup,
 	)
 	registerNewCommand(
