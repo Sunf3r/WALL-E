@@ -28,7 +28,9 @@ export async function moveTopic(
 	const { db, tg, groups } = relayCtx
 	if (!db || !tg) return null
 	const mapping = db.getByJidOrAlias(jid)
-	if (!mapping || mapping.archived) return null
+	// Muted chats stay put - moving a silenced chat would spend topics and
+	// replay budget to relocate a conversation the owner hid on purpose.
+	if (!mapping || mapping.archived || mapping.muted) return null
 	const fromChat = mapping.telegram_chat_id || groups.personal
 	const toChat = chatOfBucket(bucket, groups)
 	if (fromChat === toChat) {

@@ -121,12 +121,16 @@ async function run(): Promise<void> {
 			(p.c.bucket !== p.want || p.c.telegram_chat_id !== chatOfBucket(p.want!, ids)),
 	)
 	for (const p of plan) {
+		const home = chatOfBucket(p.want!, ids)
 		const arrow = p.c.bucket === p.want ? 'stamp' : `${p.c.bucket}->${p.want}`
 		const replay =
 			p.want === 'personal' && p.c.telegram_chat_id !== chatOfBucket('personal', ids)
 				? ' (replay<=100)'
 				: ''
-		console.log(`${arrow} ${p.c.whatsapp_jid} [${p.c.display_name}]${replay}`)
+		const blocked = !home
+			? ' SKIP (target group unconfigured)'
+			: (p.c.muted ? ' SKIP (muted)' : '')
+		console.log(`${arrow} ${p.c.whatsapp_jid} [${p.c.display_name}]${replay}${blocked}`)
 	}
 	if (!yes) {
 		console.log(`\nDry-run: ${plan.length} change(s). Rerun with --yes to apply.`)
@@ -141,14 +145,19 @@ async function run(): Promise<void> {
 	setRelayCtx(new Bot(token), db, new RateLimiter(3000))
 	let moved = 0
 	for (const p of plan) {
+		if (!chatOfBucket(p.want!, ids) || p.c.muted) continue
 		try {
 			const r = await moveTopic(p.c.whatsapp_jid, p.want!)
+			if (!r) {
+				console.log(`${p.c.whatsapp_jid}: skipped (archived since planning)`)
+				continue
+			}
 			console.log(
 				`${p.c.whatsapp_jid}: ${
-					r?.moved ? `moved (copied ${r.copied}, skipped ${r.skipped})` : 'stamped'
+					r.moved ? `moved (copied ${r.copied}, skipped ${r.skipped})` : 'stamped'
 				}`,
 			)
-			if (r?.moved) moved++
+			if (r.moved) moved++
 		} catch (e) {
 			console.error(`${p.c.whatsapp_jid}: FAILED - ${e}`)
 		}

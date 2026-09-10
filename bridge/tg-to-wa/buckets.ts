@@ -41,6 +41,10 @@ export function registerBucketHandlers(tg: Bot, db: BridgeDB, groups: GroupIds):
 				await ctx.answerCallbackQuery({ text }).catch(() => null)
 				return
 			}
+			if (mapping.muted) {
+				await ctx.answerCallbackQuery({ text: 'Unmute this chat first.' }).catch(() => null)
+				return
+			}
 			if (mapping.bucket === bucket) {
 				const text = `Already in ${LABEL[bucket]}.`
 				await ctx.answerCallbackQuery({ text }).catch(() => null)
@@ -65,6 +69,10 @@ export function registerBucketHandlers(tg: Bot, db: BridgeDB, groups: GroupIds):
 				const mapping = db.getByTopic(chatId, topicId)
 				if (!mapping) {
 					await ctx.reply('No bridged chat in this topic.')
+					return
+				}
+				if (mapping.muted) {
+					await ctx.reply('Unmute this chat first - muted chats stay put.')
 					return
 				}
 				if (mapping.bucket === bucket) {
