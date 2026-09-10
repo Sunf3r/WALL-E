@@ -49,12 +49,12 @@ bridge/                  # WA<->TG bridge (own deno.jsonc, facades + 2 module di
   bridge/format.ts       # TG entities <-> WA markdown converters
   bridge/rate-limiter.ts # FIFO flood gate with 429 retry
   bridge/wa-to-tg.ts     # facade re-exporting wa-to-tg/
-  bridge/wa-to-tg/       # 21 modules: relay, state, incoming, chat, topics, jid, text, media,
-                         # media-utils, send, send-media, quote, album, album-flush,
-                         # edits, deletes, reactions, special, unsupported,
-                         # unsupported-preview, errors
-  bridge/tg-to-wa/       # 7 modules: handlers, handler-events, content, media,
-                         # replies, album, commands
+  bridge/wa-to-tg/       # 24 modules: relay, state, incoming, chat, topics, jid, routing,
+                         # move, prompt, text, media, media-utils, send, send-media,
+                         # quote, album, album-flush, edits, deletes, reactions,
+                         # special, unsupported, unsupported-preview, errors
+  bridge/tg-to-wa/       # 8 modules: handlers, handler-events, content, media,
+                         # replies, album, commands, buckets
 class/                   # domain models: baileys.ts, cmd.ts, collection.ts,
                          # group.ts, user.ts
 cmd/ (18 files)          # commands: config/{help,language,prefix}, dev/{eval,execute,
@@ -341,13 +341,19 @@ and `connection/update.ts` calls `reattachBridge()` after every reconnect. Missi
 - `rate-limiter.ts`: one global FIFO queue per limiter; every `tg.api.*` call takes a slot; 429s
   retry unbounded (front-requeue, `retry_after + 500ms`, max 120s) so nothing is dropped; queue over
   500 applies producer backpressure.
-- WA->TG (`wa-to-tg.ts` facade + 21 modules): `relay.ts` attaches six socket listeners;
+- WA->TG (`wa-to-tg.ts` facade + 24 modules): `relay.ts` attaches six socket listeners;
   `incoming.ts` is the main loop (skip protocol/reaction/status, echo-dedupe via `reply_map`,
-  canonicalize LID/PN via `jid.ts`, resolve/create topic, mentions, media download, special-content
-  degrade, quote resolve, album buffer-or-send); `chat.ts` owns name resolution (own pushName
-  ignored for outgoing 1:1) and topic creation; `topics.ts` owns the mapping ensure (per-JID
-  in-flight lock, LID/PN alias healing, outgoing never renames, 1:1 renames update the forum title);
-  `db.ts` `jid_aliases` maps every variant to the canonical JID; `text.ts` unwrap + `@Name (+phone)`
+  canonicalize LID/PN via `jid.ts`, resolve/create topic in the chat's group, mentions, media
+  download, special-content degrade, quote resolve, album buffer-or-send, classification prompt for
+  undecided chats); `chat.ts` owns name resolution (own pushName ignored for outgoing 1:1) and topic
+  creation; `topics.ts` owns the mapping ensure (per-JID in-flight lock, LID/PN alias healing,
+  outgoing never renames, 1:1 renames update the forum title); `routing.ts` resolves the
+  personal/business home group (`TELEGRAM_SUPERGROUP_PERSONAL/_BUSINESS`, legacy fallback,
+  single-group mode when equal); `move.ts` moves topics across groups (business: clean cut,
+  personal: newest-100 `copyMessage` replay with re-threading, old topic closed with pointer);
+  `prompt.ts` posts the Personal/Business button prompt once per new chat; `db.ts` `jid_aliases`
+  maps every variant to the canonical JID plus `bucket`/`telegram_chat_id`/`prompt_msg_id` routing
+  columns and a composite `(tg_chat_id, tg_msg_id)` reply key; `text.ts` unwrap + `@Name (+phone)`
   annotation; `media.ts`/`media-utils.ts` download + size/ext; `send.ts`/`send-media.ts` route by
   kind (photo/video/animation/voice/audio/sticker/document, 1024-char caption overflow follow-ups,
   round video-note fallback); `quote.ts` reply-target or `author: preview` header;
@@ -358,20 +364,24 @@ and `connection/update.ts` calls `reattachBridge()` after every reconnect. Missi
   `special.ts` (location/contact/poll mapping); `unsupported.ts`/`unsupported-preview.ts` friendly
   `type (rawKey) + preview + sender` notices; `errors.ts` log triage; `state.ts` shared ctx +
   `tgCall` queue + `notifyTopic` (never throws/loops).
-- TG->WA (`tg-to-wa.ts` facade + 7 modules): `handlers.ts` guards (right supergroup, no bots, has
-  topic, mapping active/unmuted), entity conversion, 20MB-capped download, `media_group_id` album
-  buffering (1.2s window, ordered singles - Baileys has no album API), quote stub or fallback
-  header, `waSend` + `saveReplyMap`; `handler-events.ts` reaction/edit handlers with echo marks;
-  `content.ts` WA payload builders (`Buffer.from` at boundary, webm->webp transcode, tgs->document,
-  poll/contact text fallback); `media.ts` largest-photo pick + `getFile` fetch with double size
-  caps; `replies.ts` notices + ffmpeg webm conversion; `album.ts` batching; `commands.ts` topic
-  admin (`/start /id /topics /archive /close /reopen
+- TG->WA (`tg-to-wa.ts` facade + 8 modules): `handlers.ts` guards (either group, no bots, has topic,
+  mapping active/unmuted), entity conversion, 20MB-capped download, `media_group_id` album buffering
+  (1.2s window, ordered singles - Baileys has no album API), quote stub or fallback header,
+  `waSend` + `saveReplyMap` (chat + reply target stored); `handler-events.ts` reaction/edit handlers
+  with echo marks; `buckets.ts` Personal/Business buttons (`callback_query`, chat resolved via
+  stored prompt ID) plus `/personal` `/business` topic commands; `content.ts` WA payload builders
+  (`Buffer.from` at boundary, webm->webp transcode, tgs->document, poll/contact text fallback);
+  `media.ts` largest-photo pick + `getFile` fetch with double size caps; `replies.ts` notices +
+  ffmpeg webm conversion; `album.ts` batching; `commands.ts` topic admin
+  (`/start /id /topics /archive /close /reopen
   /mute /unmute /new <phone> [name]` with
   `onWhatsApp` verification).
-- Cross-cutting: pairing auto-creates on first WA sight (or `/new`), renames sync, mute/archive
-  pause both directions; edits bounded by TG 48h / WA ~15min windows; deletes are WA->TG only (TG
-  exposes no delete event); reactions need bot admin + opt-in `allowed_updates`; every failure
-  becomes a topic `warning` notice + log, never a throw or loop.
+- Cross-cutting: pairing auto-creates on first WA sight (or `/new`) into the personal group as
+  `undecided` until the buttons/commands classify it; renames sync, mute/archive pause both
+  directions; edits bounded by TG 48h / WA ~15min windows; deletes are WA->TG only (TG exposes no
+  delete event); reactions need bot admin + opt-in `allowed_updates` (now including
+  `callback_query`); every failure becomes a topic `warning` notice + log, never a throw or loop.
+  `scripts/bridge_buckets.ts` bulk-classifies existing chats (dry-run default, `--yes` applies).
 
 ## 15. Setup wizard (`setup.ts` + `setup/`)
 
